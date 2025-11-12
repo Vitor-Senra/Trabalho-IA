@@ -1,0 +1,5 @@
+# Requirements for running the project and tests
+# The project uses only Python standard library for runtime. These packages
+# are required to run the test suite and development tools.
+pytest>=7.0
+
