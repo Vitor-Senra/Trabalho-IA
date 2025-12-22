@@ -2,7 +2,7 @@ import time
 import random
 from datetime import datetime, timedelta
 from src.core.grafo import Grafo
-from src.core.veiculo import Veiculo, TipoVeiculo
+from src.core.veiculo import EstadoVeiculo, Veiculo, TipoVeiculo
 from src.core.pedido import Pedido
 from src.core.estado import Estado
 from src.algorithms.informados.astar import astar
@@ -79,6 +79,7 @@ class Simulador:
                 if tempo_ate_cliente < menor_tempo_chegada:
                     menor_tempo_chegada = tempo_ate_cliente
                     melhor_veiculo = veiculo
+                    veiculo.definir_rota(resultado_pickup.caminho)  
 
             # --- FASE DE ATRIBUIÇÃO ---
             if melhor_veiculo:
@@ -101,7 +102,12 @@ class Simulador:
         # Velocidade de simulação: % da aresta percorrida por passo.
         # 0.1 significa que demora 10 passos (10 segundos) a atravessar qualquer aresta.
         # Podes ajustar para basear-se no tamanho da aresta se quiseres mais realismo.
-        velocidade_passo = 0.1
+
+
+        for veiculo in self.estado.veiculos.values():
+            if veiculo.estado is EstadoVeiculo.EM_SERVICO:
+                veiculo.atualizar_posicao(10)
+
 
     def correr_passo(self):
         """Avança 1 minuto na simulação"""
