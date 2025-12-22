@@ -1,2 +1,4 @@
 # Ignora todas as pastas __pycache__ em qualquer lugar do repositório
 __pycache__/
+
+venv/
