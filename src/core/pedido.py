@@ -36,7 +36,6 @@ class Pedido:
         origem (str): Nó de origem no grafo
         destino (str): Nó de destino no grafo
         num_passageiros (int): Número de passageiros
-        timestamp (datetime): Momento em que o pedido foi criado
         horario_pretendido (datetime): Horário desejado para a viagem
         prioridade (PrioridadePedido): Nível de prioridade
         preferencia_ambiental (PreferenciaAmbiental): Preferência por tipo de veículo
@@ -56,7 +55,7 @@ class Pedido:
         horario_pretendido: Optional[datetime] = None,
         prioridade: PrioridadePedido = PrioridadePedido.NORMAL,
         preferencia_ambiental: PreferenciaAmbiental = PreferenciaAmbiental.INDIFERENTE,
-        tempo_espera_maximo: float = 15.0,
+        tempo_espera_maximo: Optional[float] = float('inf'),
         id: Optional[str] = None
     ):
         # Gerar ID único se não fornecido

@@ -1,6 +1,7 @@
 from typing import List, Dict, Optional, Set
 from datetime import datetime
 from copy import deepcopy
+from .pedido import PrioridadePedido
 
 
 class Estado:
@@ -89,11 +90,16 @@ class Estado:
     def adicionar_pedido(self, pedido):
         """
         Adiciona um novo pedido ao estado
+        Se o pedido for PREMIUM, insere no início da lista
         
         Args:
             pedido: Objeto Pedido
         """
-        self.pedidos_pendentes.append(pedido)
+        if pedido.prioridade == PrioridadePedido.PREMIUM:
+            # Inserir no início da lista
+            self.pedidos_pendentes.insert(0, pedido)
+        else:
+            self.pedidos_pendentes.append(pedido)
     
     def atribuir_pedido(self, pedido, veiculo) -> bool:
         """

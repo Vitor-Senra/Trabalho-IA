@@ -1,4 +1,6 @@
-#!/home/carlos/Documentos/LEI/IA/venv/bin/python3
+#!/bin/sh
+'''exec' "/home/vitor/Documentos/3 Ano 1 Sem/IA/Trabalho-IA/venv/bin/python3" "$0" "$@"
+' '''
 # -*- coding: utf-8 -*-
 import re
 import sys

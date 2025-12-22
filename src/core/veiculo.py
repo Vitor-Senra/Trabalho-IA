@@ -290,3 +290,26 @@ class Veiculo:
     
     def __repr__(self) -> str:
         return self.__str__()
+    
+    def definir_rota(self, lista_nos_do_astar):
+        self.rota_atual = lista_nos_do_astar  # Ex: ['A', 'B', 'C']
+        self.proximo_no_index = 1
+        self.progresso_aresta = 0.0  # 0% a 100% entre o nó atual e o próximo
+
+    def atualizar_posicao(self, velocidade_simulacao):
+        """Chamado a cada frame pelo Simulador"""
+        if not self.rota_atual: return
+
+        # Avançar X% baseado na velocidade
+        self.progresso_aresta += velocidade_simulacao
+        
+        if self.progresso_aresta >= 1.0:
+            # Chegou ao próximo nó
+            self.localizacao = self.rota_atual[self.proximo_no_index]
+            self.progresso_aresta = 0.0
+            self.proximo_no_index += 1
+            
+            # Se terminou a rota
+            if self.proximo_no_index >= len(self.rota_atual):
+                self.rota_atual = []
+                self.estado = EstadoVeiculo.DISPONIVEL
