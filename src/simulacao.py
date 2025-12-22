@@ -14,17 +14,16 @@ class Simulador:
         
         # Criar 3 Veículos de teste em nós aleatórios do mapa
         nos_mapa = list(self.grafo.nos.keys())
-        self.frota = {}
-        
+        frota_temp = {} 
         for i in range(3):
             vid = f"V{i+1}"
             tipo = TipoVeiculo.ELETRICO if i % 2 == 0 else TipoVeiculo.COMBUSTAO
             local = random.choice(nos_mapa)
-            self.frota[vid] = Veiculo(vid, tipo, 300, 4, 0.5, local)
+            frota_temp[vid] = Veiculo(vid, tipo, 300, 4, 0.5, local)
 
         self.pedidos_pendentes = []
         self.tempo_atual = datetime.now()
-        self.estado = Estado(self.frota, self.pedidos_pendentes, self.grafo, self.tempo_atual)
+        self.estado = Estado(frota_temp, self.pedidos_pendentes, self.grafo, self.tempo_atual)
 
     def gerar_pedido_aleatorio(self):
         if random.random() < 0.3: # 30% chance
