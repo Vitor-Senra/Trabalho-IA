@@ -1,6 +1,6 @@
 import sys
 import os
-import pygame
+import time
 
 # Configurar caminhos
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
@@ -8,93 +8,105 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 from src.simulacao import Simulador
 from gui import Gui
 
-def extrair_dados_para_gui(sim):
-    """
-    Traduz o estado da simulação (Classes do core) para o formato que a GUI desenha.
-    """
-    dados_veiculos = []
-    dados_pedidos = []
-
-    # 1. Extrair Veículos
-    # Na tua classe Estado, 'veiculos' é um Dicionário {id: Veiculo}
-    # Por isso usamos .values() para obter a lista de objetos
-    frota = sim.estado.veiculos.values()
-    
-    for v in frota:
-        # Calcular percentagem de bateria
-        # Atributos confirmados em veiculo.py: autonomia_atual, autonomia_max
-        bateria_pct = 0
-        if v.autonomia_max > 0:
-            bateria_pct = v.autonomia_atual / v.autonomia_max
-
-        # Obter rota com segurança
-        # Em veiculo.py, 'rota_atual' só é criado no método definir_rota.
-        # Se o carro acabou de nascer, ele não tem esse atributo. Usamos getattr com default [].
-        rota = getattr(v, 'rota_atual', [])
-
-        dados_veiculos.append({
-            'id': v.id,
-            'pos': v.localizacao, # É uma string (ID do nodo), a GUI converte
-            'bateria': bateria_pct,
-            'rota': rota,
-            'estado': v.estado.value # Para debug visual (opcional)
-        })
-
-    # 2. Extrair Pedidos Pendentes
-    # Na classe Estado: pedidos_pendentes é uma List
-    for p in sim.estado.pedidos_pendentes:
-        dados_pedidos.append({
-            'id': p.id,
-            'pos': p.origem # É uma string (ID do nodo)
-        })
-
-    return {
-        'tempo': sim.tempo_atual.strftime('%H:%M'),
-        'veiculos': dados_veiculos,
-        'pedidos': dados_pedidos
-    }
+def get_dados_visuais(self):
+        # 1. Dados dos Veículos
+        dados_veiculos = []
+        for v in self.estado.veiculos.values():
+            ocupado = v.estado.value != "disponivel"
+            
+            # --- NOVO: Tenta obter a rota atual, se existir ---
+            rota = getattr(v, 'rota_atual', []) 
+            
+            dados_veiculos.append({
+                'id': v.id,
+                'pos': v.localizacao,
+                'bateria': v.autonomia_atual / v.autonomia_max,
+                'ocupado': ocupado,
+                'estado_texto': v.estado.value.upper(), 
+                'passageiros': v.passageiros_atuais,
+                'rota': rota  # <--- Enviamos a lista de nós do caminho
+            })
+        
+        # 2. Dados dos Pedidos Pendentes
+        dados_pedidos = []
+        for p in self.estado.pedidos_pendentes:
+            tempo_espera = (self.tempo_atual - p.timestamp).total_seconds() / 60.0
+            dados_pedidos.append({
+                'id': p.id,
+                'origem': p.origem,
+                'destino': p.destino,
+                'espera': f"{tempo_espera:.1f}m"
+            })
+            
+        return {
+            'tempo': self.tempo_atual.strftime("%H:%M"),
+            'veiculos': dados_veiculos,
+            'pedidos': dados_pedidos
+        }
 
 def main():
-    arquivo_mapa = "src/data/cidade.json"
+    caminho_dados = "src/data/cidade.json"
     
-    if not os.path.exists(arquivo_mapa):
-        print("ERRO: Mapa não encontrado em src/data/cidade.json")
-        return
-
-    # Inicialização
-    sim = Simulador(arquivo_mapa)
-    gui = Gui(arquivo_mapa)
+    # 1. Inicia
+    sim = Simulador(caminho_dados)
+    gui = Gui(caminho_dados)
     
-    print("\n--- SIMULAÇÃO VISUAL A CORRER ---")
-    print("Legenda: Verde=Táxi | Azul=Rota | Laranja=Cliente")
+    print("A iniciar simulação gráfica...")
 
-    # Controlo de tempo
-    ultimo_passo = pygame.time.get_ticks()
-    intervalo_ms = 1000  # 1 segundo por passo de simulação
-
-    try:
-        while gui.running:
-            agora = pygame.time.get_ticks()
+    while gui.running:
+        # A. Atualiza Lógica
+        sim.correr_passo() # ou sim.atualizar_movimento()
+        
+        # B. Obtém dados
+        dados = get_dados_visuais(sim)
+        
+        # C. Desenha e RECEBE AÇÕES DO UTILIZADOR
+        acoes = gui.desenhar(dados)
+        
+        # D. Processar Ações da GUI
+        for acao, tipo in acoes:
+            print(f"Ação Recebida: {acao} -> {tipo}")
             
-            # Lógica da Simulação (avança a cada 1 seg)
-            if agora - ultimo_passo >= intervalo_ms:
-                print(f"[{sim.tempo_atual.strftime('%H:%M')}] Passo de simulação...")
-                sim.correr_passo()
-                ultimo_passo = agora
-            
-            # Atualização Visual (avança a 60fps)
-            dados = extrair_dados_para_gui(sim)
-            gui.desenhar(dados)
+            # --- ADICIONAR VEÍCULO ---
+            if acao == "add_carro":
+                if tipo == "random":
+                    # Cria um veículo aleatório (truque: usa a lógica do init ou cria função random)
+                    import random
+                    from src.core.veiculo import TipoVeiculo, Veiculo
+                    nos = list(sim.grafo.nos.keys())
+                    vid = f"V_Rand_{len(sim.frota)+1}"
+                    sim.frota[vid] = Veiculo(vid, TipoVeiculo.ELETRICO, 300, 4, 0.5, random.choice(nos))
+                    sim.estado.veiculos[vid] = sim.frota[vid]
+                    print("Carro Aleatório Adicionado!")
+                
+                elif tipo == "custom":
+                    print("\n--- NOVO VEÍCULO (CONSOLA) ---")
+                    try:
+                        t = input("Tipo (eletrico/combustao): ").strip().lower()
+                        loc = input("ID do Nó Inicial: ").strip()
+                        sim.criar_veiculo_manual(t, loc)
+                    except Exception as e:
+                        print(f"Erro ao criar: {e}")
+                    print("------------------------------\n")
 
-    except KeyboardInterrupt:
-        print("\nInterrompido pelo utilizador.")
-    except Exception as e:
-        print(f"Erro: {e}")
-        import traceback
-        traceback.print_exc()
-    finally:
-        pygame.quit()
-        sys.exit()
+            # --- ADICIONAR PEDIDO ---
+            elif acao == "add_pedido":
+                if tipo == "random":
+                    sim.gerar_pedido_aleatorio() # Já tens esta função
+                    print("Pedido Aleatório Gerado!")
+                
+                elif tipo == "custom":
+                    print("\n--- NOVO PEDIDO (CONSOLA) ---")
+                    try:
+                        orig = input("ID Origem: ").strip()
+                        dest = input("ID Destino: ").strip()
+                        sim.criar_pedido_manual(orig, dest)
+                    except Exception as e:
+                        print(f"Erro ao criar: {e}")
+                    print("-----------------------------\n")
+
+        # Pausa
+        time.sleep(1) 
 
 if __name__ == "__main__":
     main()
