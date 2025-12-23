@@ -296,21 +296,44 @@ class Veiculo:
         self.proximo_no_index = 1
         self.progresso_aresta = 0.0  # 0% a 100% entre o nó atual e o próximo
 
-    def atualizar_posicao(self, velocidade_simulacao)-> bool:
-        """Chamado a cada frame pelo Simulador"""
-        if not self.rota_atual: return
+    def atualizar_posicao(self, grafo, passo_tempo_min: float = 1.0) -> bool:
+        if not self.rota_atual:
+            return False
 
-        # Avançar X% baseado na velocidade
-        self.progresso_aresta += velocidade_simulacao
+        tempo_disponivel = passo_tempo_min
+        chegou_ao_destino_final = False
         
-        if self.progresso_aresta >= 1.0:
-            # Chegou ao próximo nó
-            self.localizacao = self.rota_atual[self.proximo_no_index]
-            self.progresso_aresta = 0.0
-            self.proximo_no_index += 1
+        # Limitador de segurança: impede loop infinito se houver erro no mapa
+        iteracoes_seguranca = 0 
+        MAX_ITERACOES = 10 
+
+        while tempo_disponivel > 0 and iteracoes_seguranca < MAX_ITERACOES:
+            iteracoes_seguranca += 1
             
-            # Se terminou a rota
-            if self.proximo_no_index >= len(self.rota_atual):
-                self.rota_atual = []
-                return True
-        return False  # Indica que não chegou ao destino ainda
+            no_origem = self.rota_atual[self.proximo_no_index - 1]
+            no_destino = self.rota_atual[self.proximo_no_index]
+
+            tempo_total_aresta = grafo.obter_tempo(no_origem, no_destino)
+            
+            if not tempo_total_aresta or tempo_total_aresta < 0.01:
+                tempo_total_aresta = 0.01 
+
+            tempo_restante_na_aresta = (1.0 - self.progresso_aresta) * tempo_total_aresta
+
+            if tempo_disponivel >= tempo_restante_na_aresta:
+                tempo_disponivel -= tempo_restante_na_aresta
+                self.localizacao = no_destino
+                self.historico_localizacoes.append(self.localizacao)
+                self.proximo_no_index += 1
+                self.progresso_aresta = 0.0
+                
+                if self.proximo_no_index >= len(self.rota_atual):
+                    self.rota_atual = []
+                    chegou_ao_destino_final = True
+                    break
+            else:
+                fracao_percorrida = tempo_disponivel / tempo_total_aresta
+                self.progresso_aresta += fracao_percorrida
+                tempo_disponivel = 0
+        
+        return chegou_ao_destino_final

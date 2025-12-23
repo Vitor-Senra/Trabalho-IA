@@ -20,6 +20,11 @@ COR_TRANSITO_NORMAL = (60, 60, 60)
 COR_TRANSITO_MEDIO = (255, 200, 0)
 COR_TRANSITO_ALTO = (255, 50, 50)
 
+# Cores Tipos de Nós
+COR_ESTACAO_ELETRICA = (0, 200, 255)
+COR_POSTO_COMBUSTIVEL = (255, 140, 0)
+COR_NOS_PADRAO = (100, 100, 100)
+
 # Cores Entidades
 COR_VEICULO_LIVRE = (0, 255, 0)
 COR_VEICULO_OCUPADO = (255, 50, 50)
@@ -128,12 +133,14 @@ class Gui:
         for o, vizinhos in self.grafo.arestas.items():
             if o in self.grafo.nos:
                 p1 = self.to_screen(self.grafo.nos[o].coords)
+
                 for d, aresta in vizinhos.items():
                     if d in self.grafo.nos:
                         p2 = self.to_screen(self.grafo.nos[d].coords)
                         cor = COR_ARESTAS
                         espessura = 1
-                        
+                    
+
                         if self.filtros.get('transito'):
                             fator = getattr(aresta, 'fator_transito', 1.0)
                             if fator >= 2.0:
@@ -146,6 +153,19 @@ class Gui:
                                 cor = COR_TRANSITO_NORMAL
                                 
                         pygame.draw.line(self.cache_mapa_surface, cor, p1, p2, espessura)
+        for no_id, no in self.grafo.nos.items():
+            pos = self.to_screen(no.coords)
+            raio = 3
+            
+            # Escolher cor baseada no tipo
+            if no.tipo == "estacao_recarga":
+                cor_no = COR_ESTACAO_ELETRICA
+            elif no.tipo == "posto_abastecimento":
+                cor_no = COR_POSTO_COMBUSTIVEL
+            else:
+                cor_no = COR_NOS_PADRAO
+            
+            pygame.draw.circle(self.cache_mapa_surface, cor_no, pos, raio)
 
     def processar_eventos(self):
         acoes = []

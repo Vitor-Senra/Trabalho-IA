@@ -132,14 +132,7 @@ class Simulador:
             if melhor_veiculo:
                 print(f"[SUCESSO] Pedido {pedido.id}: Atribuído ao {melhor_veiculo.id} (Chega em {menor_tempo_chegada:.1f} min)")
                 self.estado.atribuir_pedido(pedido, melhor_veiculo)
-            else:
-                # Nenhum carro consegue chegar a tempo ou estão todos ocupados
-                # Opção A: O pedido continua pendente para a próxima iteração (pode libertar-se um carro)
-                # Opção B: O pedido é rejeitado/cancelado (se quiseres ser rigoroso)
-                print(f"[FALHA] Pedido {pedido.id}: Nenhum veículo consegue chegar em {pedido.tempo_espera_maximo} min.")
-                
-                # Se quiseres cancelar o pedido após falhar:
-                # self.estado.cancelar_pedido(pedido, motivo="Tempo de espera excessivo")
+
 
 
     def atualizar_movimento_veiculos(self):
@@ -155,7 +148,7 @@ class Simulador:
             if veiculo.estado is EstadoVeiculo.DISPONIVEL:
                 continue
 
-            chegou = veiculo.atualizar_posicao(10)
+            chegou = veiculo.atualizar_posicao(self.grafo, 0.1)
             if chegou:
                 if veiculo.estado == EstadoVeiculo.A_CAMINHO:
                     

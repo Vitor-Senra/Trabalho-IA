@@ -55,7 +55,7 @@ def main():
     
     # --- CONTROLO DE TEMPO OTIMIZADO ---
     ultimo_passo_simulacao = time.time()
-    INTERVALO_SIMULACAO = 1.0  # 1 segundo entre movimentos dos carros
+    INTERVALO_SIMULACAO = 1  # 1 segundos entre movimentos dos carros
     
     # Gera dados iniciais
     dados = get_dados_visuais(sim)
@@ -67,8 +67,9 @@ def main():
             sim.correr_passo()
             dados = get_dados_visuais(sim)
             ultimo_passo_simulacao = agora
-        
+            
         acoes = gui.desenhar(dados)
+        
         
         # C. Processar Ações da GUI
         for acao, parametros in acoes:
@@ -122,7 +123,7 @@ def main():
                     sim.gerar_pedido_aleatorio()
                     print("Pedido Aleatório Gerado!")
                     dados = get_dados_visuais(sim)
-                    
+
 
 if __name__ == "__main__":
     main()
