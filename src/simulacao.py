@@ -6,6 +6,7 @@ from src.core.veiculo import EstadoVeiculo, Veiculo, TipoVeiculo
 from src.core.pedido import Pedido
 from src.core.estado import Estado
 from src.algorithms.informados.astar import astar
+import heapq
 
 class Simulador:
     def __init__(self, caminho_dados):
@@ -15,7 +16,7 @@ class Simulador:
         # Criar 3 Veículos de teste em nós aleatórios do mapa
         nos_mapa = list(self.grafo.nos.keys())
         frota_temp = {} 
-        for i in range(3):
+        for i in range(1):
             vid = f"V{i+1}"
             tipo = TipoVeiculo.ELETRICO if i % 2 == 0 else TipoVeiculo.COMBUSTAO
             local = random.choice(nos_mapa)
@@ -84,56 +85,30 @@ class Simulador:
         self.estado.veiculos[vid] = novo_veiculo
         print(f"[SUCESSO] Veículo {vid} ({tipo_str}) criado em {no_inicial}.")
 
-    def processar_atribuicoes(self):
+    # Em src/simulacao.py
+
+    def criar_pedido_manual(self, origem, destino, num_passageiros=1):
         """
-        Algoritmo Inteligente de Gestão de Frota:
-        1. Analisa cada pedido pendente.
-        2. Simula o tempo de viagem para TODOS os carros disponíveis.
-        3. Escolhe o que chega mais rápido (se cumprir o tempo máximo de espera).
+        Cria um pedido específico para testes controlados.
         """
-        # Iterar sobre uma cópia da lista para podermos remover pedidos se necessário
-        for pedido in list(self.estado.pedidos_pendentes):
-            
-            melhor_veiculo = None
-            menor_tempo_chegada = float('inf')
-            
-            # --- FASE DE PROCURA ---
-            for veiculo in self.estado.veiculos.values():
-                if not veiculo.esta_disponivel():
-                    continue
+        # 1. Validar se os locais existem no mapa
+        if origem not in self.grafo.nos:
+            print(f"[ERRO] A origem '{origem}' não existe no mapa.")
+            return
+        
+        if destino not in self.grafo.nos:
+            print(f"[ERRO] O destino '{destino}' não existe no mapa.")
+            return
 
-                # 1. Calcular rota do Veículo -> Cliente (Pickup)
-                # Usamos metrica='tempo' para o A* otimizar por rapidez e não distância
-                resultado_pickup = astar(
-                    self.grafo, 
-                    veiculo.localizacao, 
-                    pedido.origem, 
-                    metrica='tempo'
-                )
-
-                if not resultado_pickup.sucesso:
-                    continue # Não há caminho possível
-
-                tempo_ate_cliente = resultado_pickup.custo_total
-
-                # 2. Verificar Restrição: O cliente espera este tempo?
-                # O 'tempo_espera_maximo' está definido no pedido.py (ex: 15 min)
-                if tempo_ate_cliente > pedido.tempo_espera_maximo:
-                    continue # Este carro demora muito, o cliente desistiria
-
-                # 3. Escolher o Melhor (Greedy na escolha do veículo)
-                # Se este carro chega mais rápido que o anterior melhor, escolhemos este
-                if tempo_ate_cliente < menor_tempo_chegada:
-                    menor_tempo_chegada = tempo_ate_cliente
-                    melhor_veiculo = veiculo
-                    veiculo.definir_rota(resultado_pickup.caminho)  
-
-            # --- FASE DE ATRIBUIÇÃO ---
-            if melhor_veiculo:
-                print(f"[SUCESSO] Pedido {pedido.id}: Atribuído ao {melhor_veiculo.id} (Chega em {menor_tempo_chegada:.1f} min)")
-                self.estado.atribuir_pedido(pedido, melhor_veiculo)
-
-
+        # 2. Criar o pedido
+        # Importar Pedido aqui dentro ou garantir que está no topo do ficheiro
+        from src.core.pedido import Pedido 
+        
+        novo_pedido = Pedido(origem, destino, num_passageiros)
+        
+        # 3. Adicionar ao sistema
+        self.estado.adicionar_pedido(novo_pedido)
+        print(f"[TESTE] Pedido Manual criado: {origem} -> {destino} ({num_passageiros} pax)")
 
     def atualizar_movimento_veiculos(self):
         """
@@ -148,7 +123,7 @@ class Simulador:
             if veiculo.estado is EstadoVeiculo.DISPONIVEL:
                 continue
 
-            chegou = veiculo.atualizar_posicao(self.grafo, 0.1)
+            chegou = veiculo.atualizar_posicao(self.grafo, 0.4)
             if chegou:
                 if veiculo.estado == EstadoVeiculo.A_CAMINHO:
                     
@@ -186,10 +161,147 @@ class Simulador:
         self.tempo_atual += timedelta(minutes=1)
         
         # 1. Gerar novos pedidos aleatórios
-        self.gerar_pedido_aleatorio()
+        #self.gerar_pedido_aleatorio()
         
         # 2. Processar a fila com a nova inteligência
-        self.processar_atribuicoes()
+        self.processar_atribuicoes_inteligente()
         
         # 3. (Opcional) Atualizar movimento físico dos carros
         self.atualizar_movimento_veiculos()
+
+
+    
+    def _heuristica_estado(self, estado_node):
+        """
+        Estima o custo restante para concluir todos os pedidos pendentes neste estado.
+        Heurística: Soma das distâncias (Pickup + Viagem) de todos os pedidos por atender,
+        assumindo que o carro mais próximo trata de cada um (Relaxamento).
+        """
+        custo_estimado = 0
+        veiculos_disponiveis = estado_node.obter_veiculos_disponiveis()
+        
+        if not veiculos_disponiveis and estado_node.pedidos_pendentes:
+             # Penalização alta se há pedidos mas não há carros
+            return len(estado_node.pedidos_pendentes) * 1000 
+
+        for pedido in estado_node.pedidos_pendentes:
+            # 1. Estimar custo de Pickup (distância do carro livre mais próximo)
+            min_dist_pickup = float('inf')
+            for v in veiculos_disponiveis:
+                d = estado_node.grafo.distancia_euclidiana(v.localizacao, pedido.origem)
+                if d < min_dist_pickup:
+                    min_dist_pickup = d
+            
+            # Se não houver carros, usar uma constante de penalização
+            if min_dist_pickup == float('inf'):
+                min_dist_pickup = 50.0
+
+            # 2. Custo da Viagem Real
+            dist_viagem = estado_node.grafo.distancia_euclidiana(pedido.origem, pedido.destino)
+            
+            custo_estimado += (min_dist_pickup + dist_viagem)
+            
+        return custo_estimado
+
+    def processar_atribuicoes_inteligente(self):
+        """
+        Planeamento de Frota usando A* no Espaço de Estados.
+        Procura a melhor ação (atribuição) que leva a um estado com menor custo global.
+        """
+        import heapq # Necessário para a fila de prioridade
+        
+        # Se não há nada para gerir, sai
+        if not self.estado.pedidos_pendentes or not self.estado.obter_veiculos_disponiveis():
+            return
+
+        print(f"[{self.tempo_atual.strftime('%H:%M')}] A planear atribuições (Smart)...")
+
+        # 1. Configuração do A*
+        estado_inicial = self.estado.clonar()
+        
+        # Fila de Prioridade: (f_score, g_score, contador_desempate, estado, caminho_de_acoes)
+        # f_score = custo_acumulado (g) + heuristica (h)
+        queue = []
+        counter = 0 # Para desempatar na queue
+        
+        h_inicial = self._heuristica_estado(estado_inicial)
+        heapq.heappush(queue, (h_inicial, 0, counter, estado_inicial, []))
+        
+        melhor_caminho = []
+        melhor_f = float('inf')
+        iteracoes = 0
+        MAX_ITERACOES = 50
+        
+        # 2. Ciclo de Procura
+        while queue and iteracoes < MAX_ITERACOES:
+            f, g, _, estado_atual, caminho = heapq.heappop(queue)
+            iteracoes += 1
+            
+            # Se encontrámos um estado onde todos os pedidos foram tratados (objetivo)
+            if not estado_atual.pedidos_pendentes:
+                melhor_caminho = caminho
+                break
+            
+            # Gerar sucessores (Ações Possíveis: V1->P1, V1->P2, V2->P1...)
+            acoes_possiveis = estado_atual.obter_acoes_possiveis()
+            
+            if not acoes_possiveis:
+                # Se este caminho não tem saída mas é o melhor até agora (menos pendentes)
+                if f < melhor_f:
+                    melhor_f = f
+                    melhor_caminho = caminho
+                continue
+
+            for acao in acoes_possiveis:
+                # Simular o novo estado
+                novo_estado = estado_atual.aplicar_acao(acao)
+                
+                # Custo g: Custo acumulado + Custo desta ação (distância da viagem)
+                custo_acao = acao['distancia_estimada']
+                novo_g = g + custo_acao
+                
+                # Heurística h: Estimativa do que falta fazer
+                novo_h = self._heuristica_estado(novo_estado)
+                novo_f = novo_g + novo_h
+                
+                # Adicionar à fila
+                counter += 1
+                novo_caminho = caminho + [acao]
+                heapq.heappush(queue, (novo_f, novo_g, counter, novo_estado, novo_caminho))
+
+        # 3. Execução da Decisão
+        # Se o algoritmo encontrou um plano, executamos APENAS a primeira ação (passo seguinte)
+        if melhor_caminho:
+            melhor_acao = melhor_caminho[0]
+            
+            pedido_clone = melhor_acao['pedido']
+            veiculo_clone = melhor_acao['veiculo']
+            
+            # Recuperar os objetos REAIS da simulação (não os clones)
+            pedido_real = next(p for p in self.estado.pedidos_pendentes if p.id == pedido_clone.id)
+            veiculo_real = self.estado.veiculos[veiculo_clone.id]
+            
+            print(f"[INTELIGENTE] Decisão: Atribuir {veiculo_real.id} ao pedido {pedido_real.id}")
+            
+            # --- Lógica de Atribuição (Cópia da lógica 'A Caminho') ---
+            from src.core.veiculo import EstadoVeiculo
+            
+            # Definir estado e atribuir
+            self.estado.atribuir_pedido(pedido_real, veiculo_real)
+            veiculo_real.estado = EstadoVeiculo.A_CAMINHO
+            
+            # Calcular rota física no mapa (Pickup)
+            rota_pickup = astar(
+                self.grafo, 
+                veiculo_real.localizacao, 
+                pedido_real.origem, 
+                metrica='tempo'
+            )
+            
+            if rota_pickup.sucesso:
+                veiculo_real.definir_rota(rota_pickup.caminho)
+            else:
+                print(f"[ERRO] Falha ao calcular rota física para {veiculo_real.id}")
+        else:
+            # Fallback: Se o planeamento falhar, não faz nada neste turno
+            pass
