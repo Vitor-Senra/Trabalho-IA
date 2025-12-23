@@ -148,7 +148,7 @@ class Simulador:
             if veiculo.estado is EstadoVeiculo.DISPONIVEL:
                 continue
 
-            chegou = veiculo.atualizar_posicao(self.grafo, 0.1)
+            chegou = veiculo.atualizar_posicao(self.grafo, 0.5)
             if chegou:
                 if veiculo.estado == EstadoVeiculo.A_CAMINHO:
                     

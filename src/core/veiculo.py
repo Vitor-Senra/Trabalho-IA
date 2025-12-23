@@ -302,38 +302,60 @@ class Veiculo:
 
         tempo_disponivel = passo_tempo_min
         chegou_ao_destino_final = False
-        
-        # Limitador de segurança: impede loop infinito se houver erro no mapa
-        iteracoes_seguranca = 0 
-        MAX_ITERACOES = 10 
+
+        iteracoes_seguranca = 0
+        MAX_ITERACOES = 10
 
         while tempo_disponivel > 0 and iteracoes_seguranca < MAX_ITERACOES:
             iteracoes_seguranca += 1
-            
+
             no_origem = self.rota_atual[self.proximo_no_index - 1]
             no_destino = self.rota_atual[self.proximo_no_index]
 
             tempo_total_aresta = grafo.obter_tempo(no_origem, no_destino)
-            
+            distancia_aresta = grafo.obter_distancia(no_origem, no_destino)
+
             if not tempo_total_aresta or tempo_total_aresta < 0.01:
-                tempo_total_aresta = 0.01 
+                tempo_total_aresta = 0.01
+
+            if not distancia_aresta or distancia_aresta <= 0:
+                distancia_aresta = 0.001  # segurança
 
             tempo_restante_na_aresta = (1.0 - self.progresso_aresta) * tempo_total_aresta
 
             if tempo_disponivel >= tempo_restante_na_aresta:
+                # percorre o resto da aresta
+                tempo_percorrido = tempo_restante_na_aresta
+                fracao = tempo_percorrido / tempo_total_aresta
+                distancia_percorrida = fracao * distancia_aresta
+
+                self.autonomia_atual -= distancia_percorrida
+                self.km_total_percorridos += distancia_percorrida
+
                 tempo_disponivel -= tempo_restante_na_aresta
                 self.localizacao = no_destino
                 self.historico_localizacoes.append(self.localizacao)
                 self.proximo_no_index += 1
                 self.progresso_aresta = 0.0
-                
+
                 if self.proximo_no_index >= len(self.rota_atual):
                     self.rota_atual = []
                     chegou_ao_destino_final = True
                     break
+
             else:
-                fracao_percorrida = tempo_disponivel / tempo_total_aresta
-                self.progresso_aresta += fracao_percorrida
+                # percorre apenas parte da aresta
+                tempo_percorrido = tempo_disponivel
+                fracao = tempo_percorrido / tempo_total_aresta
+                distancia_percorrida = fracao * distancia_aresta
+
+                self.autonomia_atual -= distancia_percorrida
+                self.km_total_percorridos += distancia_percorrida
+
+                self.progresso_aresta += fracao
                 tempo_disponivel = 0
-        
+
+        # impedir autonomia negativa
+        self.autonomia_atual = max(0.0, self.autonomia_atual)
+
         return chegou_ao_destino_final
