@@ -2,6 +2,7 @@ import osmnx as ox
 import json
 import os
 from noise import pnoise2
+from random import randint
 
 # Função Perlin
 def perlin(x, y, scale=0.1, octaves=6):
@@ -40,18 +41,29 @@ def gerar_json_rede_viaria(localizacao="Barcelos, Portugal", ficheiro_saida="src
 
     # Reverter projeção para ter Latitude/Longitude corretas
     G_proj = ox.project_graph(G, to_crs="EPSG:4326")
-    
     # --- PROCESSAR NÓS ---
+    percentagem_estacao_recarga = 3  # 3% estações de recarga
+    percentagem_posto_abastecimento = 6  # 6% bombas de gasolina
     for no_id, dados in G_proj.nodes(data=True):
         # SIMPLIFICAÇÃO: Todos os nós são apenas locais de passagem/recolha
         # Não criamos estações de recarga nem bombas de gasolina
-        
+        r = randint(1,100)
+        tipo = "zona_pickup" 
+        capacidade_recarga = 0
+        if r <= percentagem_estacao_recarga:
+            tipo = "estacao_recarga"
+            capacidade_recarga = 5
+        elif r <= percentagem_estacao_recarga + percentagem_posto_abastecimento:
+            tipo = "posto_abastecimento"
+            capacidade_recarga = 8
+
         dados_projeto["nos"][str(no_id)] = {
-            "tipo": "zona_pickup",  # <--- Forçamos este tipo para todos
+            "tipo": tipo,  # <--- Forçamos este tipo para todos
             "coords": [dados['x'], dados['y']], # longitude, latitude
             "nome": f"Cruzamento {no_id}",
-            "capacidade_recarga": 0 # Sem capacidade de recarga
+            "capacidade_recarga": capacidade_recarga # Apenas para estações de recarga
         }
+
 
     # --- PROCESSAR ARESTAS ---
     for u, v, k, dados in G_proj.edges(keys=True, data=True):
