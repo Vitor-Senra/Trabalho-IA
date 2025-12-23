@@ -37,6 +37,53 @@ class Simulador:
                 self.estado.adicionar_pedido(novo_pedido)
                 print(f"[PEDIDO] Novo pedido de {origem} para {destino}")
 
+    def gerar_carro_aleatorio(self):
+        nos = list(self.grafo.nos.keys())
+        vid = f"V_Rand_{len(self.estado.veiculos)+1}"
+        tipo = random.choice([TipoVeiculo.ELETRICO, TipoVeiculo.COMBUSTAO])
+        local = random.choice(nos)
+        novo_veiculo = Veiculo(vid, tipo, 300, 4, 0.5, local)
+        self.estado.veiculos[vid] = novo_veiculo
+        print(f"[VEÍCULO] Novo veículo {vid} do tipo {tipo.name} adicionado em {local}")
+
+    def criar_veiculo_manual(self, tipo_str, no_inicial, capacidade=4, autonomia=300):
+        """Cria um veículo com parâmetros específicos"""
+        # 1. Validar Tipo
+        tipo_str = tipo_str.lower()
+        custo_km = 0.5
+        tipo_enum = None
+        
+        if tipo_str == "eletrico":
+            tipo_enum = TipoVeiculo.ELETRICO
+            custo_km = 0.5
+        elif tipo_str == "combustao":
+            tipo_enum = TipoVeiculo.COMBUSTAO
+            custo_km = 1.0 # Mais caro por km
+        else:
+            print(f"Erro: Tipo '{tipo_str}' inválido.")
+            return
+
+        # 2. Validar Nó
+        if no_inicial not in self.grafo.nos:
+            print(f"Erro: Nó '{no_inicial}' não existe.")
+            return
+
+        # 3. Criar e Adicionar
+        vid = f"V_Man_{len(self.estado.veiculos)+1}"
+        
+        # Instancia usando os valores passados
+        novo_veiculo = Veiculo(
+            id=vid, 
+            tipo=tipo_enum, 
+            autonomia_max=autonomia, 
+            capacidade=capacidade, 
+            custo_por_km=custo_km, 
+            localizacao=no_inicial
+        )
+        
+        self.estado.veiculos[vid] = novo_veiculo
+        print(f"[SUCESSO] Veículo {vid} ({tipo_str}) criado em {no_inicial}.")
+
     def processar_atribuicoes(self):
         """
         Algoritmo Inteligente de Gestão de Frota:

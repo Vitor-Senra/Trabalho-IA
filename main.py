@@ -8,13 +8,13 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 from src.simulacao import Simulador
 from gui import Gui
 
-def get_dados_visuais(self):
+def get_dados_visuais(sim):
         # 1. Dados dos Veículos
         dados_veiculos = []
-        for v in self.estado.veiculos.values():
+        for v in sim.estado.veiculos.values():
             ocupado = v.estado.value != "disponivel"
             
-            # --- NOVO: Tenta obter a rota atual, se existir ---
+            # Tenta obter a rota atual, se existir
             rota = getattr(v, 'rota_atual', []) 
             
             dados_veiculos.append({
@@ -24,13 +24,13 @@ def get_dados_visuais(self):
                 'ocupado': ocupado,
                 'estado_texto': v.estado.value.upper(), 
                 'passageiros': v.passageiros_atuais,
-                'rota': rota  # <--- Enviamos a lista de nós do caminho
+                'rota': rota
             })
         
         # 2. Dados dos Pedidos Pendentes
         dados_pedidos = []
-        for p in self.estado.pedidos_pendentes:
-            tempo_espera = (self.tempo_atual - p.timestamp).total_seconds() / 60.0
+        for p in sim.estado.pedidos_pendentes:
+            tempo_espera = (sim.tempo_atual - p.timestamp).total_seconds() / 60.0
             dados_pedidos.append({
                 'id': p.id,
                 'origem': p.origem,
@@ -39,7 +39,7 @@ def get_dados_visuais(self):
             })
             
         return {
-            'tempo': self.tempo_atual.strftime("%H:%M"),
+            'tempo': sim.tempo_atual.strftime("%H:%M"),
             'veiculos': dados_veiculos,
             'pedidos': dados_pedidos
         }
@@ -52,61 +52,82 @@ def main():
     gui = Gui(caminho_dados)
     
     print("A iniciar simulação gráfica...")
+    
+    # --- CONTROLO DE TEMPO OTIMIZADO ---
+    ultimo_passo_simulacao = time.time()
+    INTERVALO_SIMULACAO = 1.0  # 1 segundo entre movimentos dos carros
+    
+    # Gera dados iniciais
+    dados = get_dados_visuais(sim)
 
     while gui.running:
-        # A. Atualiza Lógica
-        sim.correr_passo() # ou sim.atualizar_movimento()
+        agora = time.time()
         
-        # B. Obtém dados
-        dados = get_dados_visuais(sim)
+        # A. Atualiza Lógica (apenas se passou 1 segundo)
+        if agora - ultimo_passo_simulacao >= INTERVALO_SIMULACAO:
+            sim.correr_passo()
+            dados = get_dados_visuais(sim) # Atualiza dados apenas quando simulação muda
+            ultimo_passo_simulacao = agora
         
-        # C. Desenha e RECEBE AÇÕES DO UTILIZADOR
+        # B. Desenha e RECEBE AÇÕES DO UTILIZADOR (Corre a 30 FPS)
+        # O clock.tick(30) está dentro do gui.desenhar
         acoes = gui.desenhar(dados)
         
-        # D. Processar Ações da GUI
-        for acao, tipo in acoes:
-            print(f"Ação Recebida: {acao} -> {tipo}")
+        # C. Processar Ações da GUI
+        for acao, parametros in acoes:
+            print(f"Ação Recebida: {acao} -> {parametros}")
             
-            # --- ADICIONAR VEÍCULO ---
-            if acao == "add_carro":
-                if tipo == "random":
-                    # Cria um veículo aleatório (truque: usa a lógica do init ou cria função random)
+            # --- 1. CRIAR VEÍCULO MANUALMENTE ---
+            if acao == "criar_carro_manual":
+                t = parametros['tipo']  
+                n = parametros['no']
+                try:
+                    sim.criar_veiculo_manual(t, n)
+                    dados = get_dados_visuais(sim) # Atualiza visual imediatamente
+                except AttributeError:
+                    print("ERRO: O método 'criar_veiculo_manual' não existe no Simulador.")
+                except Exception as e:
+                    print(f"ERRO ao criar veículo: {e}")
+
+            # --- 2. CRIAR PEDIDO MANUALMENTE ---
+            elif acao == "criar_pedido_manual":
+                orig = parametros['origem']
+                dest = parametros['destino']
+                try:
+                    sim.criar_pedido_manual(orig, dest)
+                    dados = get_dados_visuais(sim)
+                except AttributeError:
+                    print("ERRO: O método 'criar_pedido_manual' não existe no Simulador.")
+                except Exception as e:
+                    print(f"ERRO ao criar pedido: {e}")
+
+            # --- 3. BOTÕES RÁPIDOS (Aleatório) ---
+            elif acao == "add_carro":
+                if parametros == "random":
                     import random
                     from src.core.veiculo import TipoVeiculo, Veiculo
+                    
+                    if not sim.grafo.nos:
+                        print("Erro: Grafo vazio.")
+                        continue
+                        
                     nos = list(sim.grafo.nos.keys())
-                    vid = f"V_Rand_{len(sim.frota)+1}"
-                    sim.frota[vid] = Veiculo(vid, TipoVeiculo.ELETRICO, 300, 4, 0.5, random.choice(nos))
-                    sim.estado.veiculos[vid] = sim.frota[vid]
-                    print("Carro Aleatório Adicionado!")
-                
-                elif tipo == "custom":
-                    print("\n--- NOVO VEÍCULO (CONSOLA) ---")
-                    try:
-                        t = input("Tipo (eletrico/combustao): ").strip().lower()
-                        loc = input("ID do Nó Inicial: ").strip()
-                        sim.criar_veiculo_manual(t, loc)
-                    except Exception as e:
-                        print(f"Erro ao criar: {e}")
-                    print("------------------------------\n")
+                    vid = f"V_Rand_{len(sim.estado.veiculos)+1}"
+                    tipo_v = TipoVeiculo.ELETRICO if random.random() > 0.5 else TipoVeiculo.COMBUSTAO
+                    
+                    novo_veiculo = Veiculo(vid, tipo_v, 300, 4, 0.5, random.choice(nos))
+                    sim.estado.veiculos[vid] = novo_veiculo
+                    print(f"Carro Aleatório {vid} Adicionado!")
+                    dados = get_dados_visuais(sim)
 
-            # --- ADICIONAR PEDIDO ---
             elif acao == "add_pedido":
-                if tipo == "random":
-                    sim.gerar_pedido_aleatorio() # Já tens esta função
+                if parametros == "random":
+                    sim.gerar_pedido_aleatorio()
                     print("Pedido Aleatório Gerado!")
-                
-                elif tipo == "custom":
-                    print("\n--- NOVO PEDIDO (CONSOLA) ---")
-                    try:
-                        orig = input("ID Origem: ").strip()
-                        dest = input("ID Destino: ").strip()
-                        sim.criar_pedido_manual(orig, dest)
-                    except Exception as e:
-                        print(f"Erro ao criar: {e}")
-                    print("-----------------------------\n")
-
-        # Pausa
-        time.sleep(1) 
+                    dados = get_dados_visuais(sim)
+        
+        # NOTA: O time.sleep(1) foi removido para não bloquear a GUI.
+        # O controlo de velocidade é feito pelo if no início do loop.
 
 if __name__ == "__main__":
     main()

@@ -1,5 +1,6 @@
 import pygame
 import sys
+import math
 from src.core.grafo import Grafo
 
 # --- CONFIGURAÇÕES ---
@@ -14,6 +15,11 @@ COR_FUNDO_BARRA = (50, 50, 60)
 COR_ARESTAS = (60, 60, 60)
 COR_NOS = (100, 100, 100)
 
+# Cores Trânsito
+COR_TRANSITO_NORMAL = (60, 60, 60)
+COR_TRANSITO_MEDIO = (255, 200, 0)
+COR_TRANSITO_ALTO = (255, 50, 50)
+
 # Cores Entidades
 COR_VEICULO_LIVRE = (0, 255, 0)
 COR_VEICULO_OCUPADO = (255, 50, 50)
@@ -26,12 +32,13 @@ COR_TEXTO_SECUNDARIO = (200, 200, 200)
 COR_SEPARADOR = (100, 100, 120)
 COR_BTN_ATIVO = (0, 180, 0)
 COR_BTN_INATIVO = (80, 80, 80)
-COR_BTN_ACAO = (0, 120, 200) # Azul para botões de ação
+COR_BTN_ACAO = (0, 120, 200)
+COR_BTN_SELECIONAR = (100, 100, 150)
 
 class Gui:
     def __init__(self, caminho_json):
         pygame.init()
-        pygame.display.set_caption("TaxiGreen - Painel de Controlo")
+        pygame.display.set_caption("TaxiGreen - Painel de Controlo (Otimizado)")
         self.screen = pygame.display.set_mode((LARGURA_TOTAL, ALTURA))
         
         self.font_titulo = pygame.font.SysFont("Arial", 18, bold=True)
@@ -42,31 +49,41 @@ class Gui:
         self.calcular_escala()
         self.running = True
 
+        # --- VARIÁVEIS DE ESTADO DOS FORMULÁRIOS ---
+        self.input_carro_no = ""
+        self.input_pedido_origem = ""
+        self.input_pedido_destino = ""
+        self.campo_focado = None
+        
+        self.input_tipo_carro = "eletrico"
+        self.modo_selecao = None 
+
         # Estados de Filtro
-        self.filtros = {'veiculos': True, 'pedidos': True, 'transito': True, 'tempo': True}
+        self.filtros = {'veiculos': True, 'pedidos': True, 'rotas': True, 'tempo': True, 'transito': True}
+        
+        # --- CACHE DO MAPA (OTIMIZAÇÃO) ---
+        self.cache_mapa_surface = None
+        self.ultimo_estado_transito = None # Para verificar se é preciso redesenhar o cache
         
         # --- DEFINIÇÃO DE BOTÕES ---
         x_base = LARGURA_MAPA + 20
-        
-        # Botões de Filtro (Topo)
         self.botoes_filtro = {
             'veiculos': pygame.Rect(x_base, 60, 140, 30),
             'pedidos': pygame.Rect(x_base + 150, 60, 140, 30),
-            'transito': pygame.Rect(x_base, 100, 140, 30),
-            'tempo': pygame.Rect(x_base + 150, 100, 140, 30)
+            'rotas': pygame.Rect(x_base, 100, 140, 30),
+            'tempo': pygame.Rect(x_base + 150, 100, 140, 30),
+            'transito': pygame.Rect(x_base, 140, 290, 30)
         }
 
-        # Botões de Ação (Fundo)
         y_acao = ALTURA - 80
         self.btn_novo_carro = pygame.Rect(x_base, y_acao, 140, 50)
         self.btn_novo_pedido = pygame.Rect(x_base + 150, y_acao, 140, 50)
 
-        # Estado do Popup (None, 'carro', 'pedido')
         self.popup_ativo = None 
-        
-        # Botões do Popup (Calculados dinamicamente ao desenhar)
         self.rect_popup_random = None
         self.rect_popup_custom = None
+        
+        self.ui_rects = {}
 
     def calcular_escala(self):
         self.min_lat, self.max_lat = float('inf'), float('-inf')
@@ -89,39 +106,169 @@ class Gui:
         sy = (ALTURA - self.padding) - norm_y * (ALTURA - 2 * self.padding)
         return int(sx), int(sy)
 
-    def processar_eventos(self):
-        """Retorna uma lista de ações para o main.py executar"""
-        acoes = []
+    def obter_no_sob_mouse(self, pos):
+        mx, my = pos
+        limite_dist = 15
+        melhor_no = None
+        menor_dist = float('inf')
+
+        for nid, no in self.grafo.nos.items():
+            nx, ny = self.to_screen(no.coords)
+            dist = math.sqrt((mx - nx)**2 + (my - ny)**2)
+            if dist < limite_dist and dist < menor_dist:
+                menor_dist = dist
+                melhor_no = nid
+        return melhor_no
+
+    def _gerar_cache_mapa(self):
+        """Desenha o mapa estático numa superfície para reutilização"""
+        self.cache_mapa_surface = pygame.Surface((LARGURA_MAPA, ALTURA))
+        self.cache_mapa_surface.fill(COR_FUNDO_MAPA)
         
+        for o, vizinhos in self.grafo.arestas.items():
+            if o in self.grafo.nos:
+                p1 = self.to_screen(self.grafo.nos[o].coords)
+                for d, aresta in vizinhos.items():
+                    if d in self.grafo.nos:
+                        p2 = self.to_screen(self.grafo.nos[d].coords)
+                        cor = COR_ARESTAS
+                        espessura = 1
+                        
+                        if self.filtros.get('transito'):
+                            fator = getattr(aresta, 'fator_transito', 1.0)
+                            if fator >= 2.0:
+                                cor = COR_TRANSITO_ALTO
+                                espessura = 2
+                            elif fator > 1.3:
+                                cor = COR_TRANSITO_MEDIO
+                                espessura = 2
+                            else:
+                                cor = COR_TRANSITO_NORMAL
+                                
+                        pygame.draw.line(self.cache_mapa_surface, cor, p1, p2, espessura)
+
+    def processar_eventos(self):
+        acoes = []
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-                pygame.quit()
-                sys.exit()
+                pygame.quit(); sys.exit()
             
+            # --- INPUT DE TEXTO ---
+            if event.type == pygame.KEYDOWN and self.campo_focado:
+                texto_atual = ""
+                if self.campo_focado == 'carro_no': texto_atual = self.input_carro_no
+                elif self.campo_focado == 'pedido_origem': texto_atual = self.input_pedido_origem
+                elif self.campo_focado == 'pedido_destino': texto_atual = self.input_pedido_destino
+
+                if event.key == pygame.K_BACKSPACE:
+                    texto_atual = texto_atual[:-1]
+                else:
+                    if len(texto_atual) < 10 and event.unicode.isalnum():
+                        texto_atual += event.unicode
+                
+                if self.campo_focado == 'carro_no': self.input_carro_no = texto_atual
+                elif self.campo_focado == 'pedido_origem': self.input_pedido_origem = texto_atual
+                elif self.campo_focado == 'pedido_destino': self.input_pedido_destino = texto_atual
+                
+                return acoes 
+
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1: # Clique Esquerdo
+                if event.button == 1:
                     mx, my = event.pos
                     
-                    # 1. Se o Popup estiver aberto, só processa cliques nele
-                    if self.popup_ativo:
+                    # --- 1. MODO DE SELEÇÃO NO MAPA ---
+                    if self.modo_selecao:
+                        no_selecionado = self.obter_no_sob_mouse((mx, my))
+                        if no_selecionado:
+                            if self.modo_selecao == 'selecionar_carro':
+                                self.input_carro_no = no_selecionado
+                                self.popup_ativo = 'form_carro'
+                            elif self.modo_selecao == 'selecionar_origem':
+                                self.input_pedido_origem = no_selecionado
+                                self.popup_ativo = 'form_pedido'
+                            elif self.modo_selecao == 'selecionar_destino':
+                                self.input_pedido_destino = no_selecionado
+                                self.popup_ativo = 'form_pedido'
+                            self.modo_selecao = None 
+                        continue 
+
+                    # --- 2. Lógica do Formulário CARRO ---
+                    if self.popup_ativo == 'form_carro':
+                        if self.ui_rects.get('input_carro_no', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
+                            self.campo_focado = 'carro_no'
+                        else:
+                            self.campo_focado = None
+                        
+                        if self.ui_rects.get('btn_sel_carro', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
+                            self.modo_selecao = 'selecionar_carro'
+                            self.popup_ativo = None 
+                        
+                        elif self.ui_rects.get('btn_eletrico', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
+                            self.input_tipo_carro = "eletrico"
+                        elif self.ui_rects.get('btn_combustao', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
+                            self.input_tipo_carro = "combustao"
+                        
+                        elif self.ui_rects.get('btn_confirmar_carro', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
+                            if self.input_carro_no:
+                                acoes.append(("criar_carro_manual", {
+                                    "tipo": self.input_tipo_carro,
+                                    "no": self.input_carro_no
+                                }))
+                                self.popup_ativo = None
+                        elif self.ui_rects.get('btn_cancelar', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
+                            self.popup_ativo = None
+                        continue 
+
+                    # --- 3. Lógica do Formulário PEDIDO ---
+                    if self.popup_ativo == 'form_pedido':
+                        if self.ui_rects.get('input_origem', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
+                            self.campo_focado = 'pedido_origem'
+                        elif self.ui_rects.get('input_destino', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
+                            self.campo_focado = 'pedido_destino'
+                        else:
+                            self.campo_focado = None
+                        
+                        if self.ui_rects.get('btn_sel_origem', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
+                            self.modo_selecao = 'selecionar_origem'
+                            self.popup_ativo = None
+                        elif self.ui_rects.get('btn_sel_destino', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
+                            self.modo_selecao = 'selecionar_destino'
+                            self.popup_ativo = None
+                        
+                        elif self.ui_rects.get('btn_confirmar_pedido', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
+                            if self.input_pedido_origem and self.input_pedido_destino:
+                                acoes.append(("criar_pedido_manual", {
+                                    "origem": self.input_pedido_origem,
+                                    "destino": self.input_pedido_destino
+                                }))
+                                self.popup_ativo = None
+                        elif self.ui_rects.get('btn_cancelar', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
+                            self.popup_ativo = None
+                        continue
+
+                    # --- 4. Popup Inicial ---
+                    if self.popup_ativo in ['carro', 'pedido']:
                         if self.rect_popup_random and self.rect_popup_random.collidepoint(mx, my):
                             acoes.append((f"add_{self.popup_ativo}", "random"))
-                            self.popup_ativo = None # Fecha popup
+                            self.popup_ativo = None 
                         elif self.rect_popup_custom and self.rect_popup_custom.collidepoint(mx, my):
-                            acoes.append((f"add_{self.popup_ativo}", "custom"))
-                            self.popup_ativo = None # Fecha popup
+                            if self.popup_ativo == 'carro':
+                                self.popup_ativo = 'form_carro'
+                                self.input_carro_no = ""
+                            else:
+                                self.popup_ativo = 'form_pedido'
+                                self.input_pedido_origem = ""
+                                self.input_pedido_destino = ""
                         else:
-                            # Clicar fora fecha o popup
                             self.popup_ativo = None
-                        continue # Não processa outros botões
+                        continue
 
-                    # 2. Botões de Filtro
+                    # --- 5. Botões da Interface ---
                     for chave, rect in self.botoes_filtro.items():
                         if rect.collidepoint(mx, my):
                             self.filtros[chave] = not self.filtros[chave]
 
-                    # 3. Botões de Ação (Fundo)
                     if self.btn_novo_carro.collidepoint(mx, my):
                         self.popup_ativo = 'carro'
                     elif self.btn_novo_pedido.collidepoint(mx, my):
@@ -129,75 +276,124 @@ class Gui:
 
         return acoes
 
-    def desenhar_botao(self, rect, texto, cor_base, texto_cor=COR_TEXTO):
+    def desenhar_botao(self, rect, texto, cor_base, texto_cor=COR_TEXTO, pequena_fonte=False):
+        if not rect: return
         mx, my = pygame.mouse.get_pos()
         cor = cor_base
-        if rect.collidepoint(mx, my): # Hover
+        if rect.collidepoint(mx, my): 
             cor = (min(cor[0]+30, 255), min(cor[1]+30, 255), min(cor[2]+30, 255))
         
         pygame.draw.rect(self.screen, cor, rect, border_radius=5)
         pygame.draw.rect(self.screen, (200,200,200), rect, 1, border_radius=5)
         
-        surf = self.font_titulo.render(texto, True, texto_cor)
+        fonte = self.font_texto if pequena_fonte else self.font_titulo
+        surf = fonte.render(texto, True, texto_cor)
         rect_txt = surf.get_rect(center=rect.center)
         self.screen.blit(surf, rect_txt)
 
-    def desenhar_popup(self):
-        """Desenha uma janela sobreposta para escolher Aleatório vs Manual"""
-        if not self.popup_ativo: return
-
-        # Fundo semi-transparente
-        s = pygame.Surface((LARGURA_TOTAL, ALTURA))
-        s.set_alpha(128)
-        s.fill((0,0,0))
-        self.screen.blit(s, (0,0))
-
-        # Janela do Popup
+    def desenhar_popup_inicial(self):
+        if not self.popup_ativo or self.popup_ativo.startswith('form'): return
+        self._desenhar_fundo_modal()
         w, h = 400, 200
         cx, cy = LARGURA_TOTAL//2 - w//2, ALTURA//2 - h//2
         rect_janela = pygame.Rect(cx, cy, w, h)
-        pygame.draw.rect(self.screen, (70, 70, 80), rect_janela, border_radius=10)
-        pygame.draw.rect(self.screen, (255, 255, 255), rect_janela, 2, border_radius=10)
-
-        # Título
+        self._desenhar_janela(rect_janela)
         titulo = "Adicionar Veículo" if self.popup_ativo == 'carro' else "Adicionar Pedido"
-        txt = self.font_titulo.render(titulo, True, COR_TEXTO)
-        self.screen.blit(txt, (cx + 20, cy + 20))
-
-        # Botões de Escolha
+        self.screen.blit(self.font_titulo.render(titulo, True, COR_TEXTO), (cx + 20, cy + 20))
         self.rect_popup_random = pygame.Rect(cx + 50, cy + 80, 140, 60)
         self.rect_popup_custom = pygame.Rect(cx + 210, cy + 80, 140, 60)
-
         self.desenhar_botao(self.rect_popup_random, "ALEATÓRIO", (0, 150, 0))
         self.desenhar_botao(self.rect_popup_custom, "PERSONALIZADO", (200, 100, 0))
         
-        # Dica
-        dica = self.font_texto.render("(Personalizado abre o terminal)", True, COR_TEXTO_SECUNDARIO)
-        self.screen.blit(dica, (cx + 120, cy + 160))
+    def desenhar_form_carro(self):
+        self._desenhar_fundo_modal()
+        w, h = 400, 320
+        cx, cy = LARGURA_TOTAL//2 - w//2, ALTURA//2 - h//2
+        rect_janela = pygame.Rect(cx, cy, w, h)
+        self._desenhar_janela(rect_janela)
+        self.screen.blit(self.font_titulo.render("NOVO VEÍCULO", True, COR_TEXTO), (cx + 40, cy + 20))
+        # ID do Nó
+        self.screen.blit(self.font_texto.render("ID do Nó Inicial:", True, COR_TEXTO), (cx + 50, cy + 70))
+        self.ui_rects['input_carro_no'] = pygame.Rect(cx + 50, cy + 90, 200, 35)
+        self.ui_rects['btn_sel_carro'] = pygame.Rect(cx + 260, cy + 90, 90, 35)
+        self._desenhar_input(self.ui_rects['input_carro_no'], self.input_carro_no, self.campo_focado == 'carro_no')
+        self.desenhar_botao(self.ui_rects['btn_sel_carro'], "Mapa", COR_BTN_SELECIONAR, pequena_fonte=True)
+        # Tipo
+        self.screen.blit(self.font_texto.render("Tipo de Motor:", True, COR_TEXTO), (cx + 50, cy + 140))
+        self.ui_rects['btn_eletrico'] = pygame.Rect(cx + 50, cy + 160, 140, 40)
+        self.ui_rects['btn_combustao'] = pygame.Rect(cx + 210, cy + 160, 140, 40)
+        cor_el = (0, 180, 0) if self.input_tipo_carro == "eletrico" else (60, 60, 60)
+        cor_cb = (200, 50, 50) if self.input_tipo_carro == "combustao" else (60, 60, 60)
+        self.desenhar_botao(self.ui_rects['btn_eletrico'], "ELÉTRICO", cor_el)
+        self.desenhar_botao(self.ui_rects['btn_combustao'], "COMBUSTÃO", cor_cb)
+        # Ações
+        self.ui_rects['btn_confirmar_carro'] = pygame.Rect(cx + 50, cy + 240, 140, 40)
+        self.ui_rects['btn_cancelar'] = pygame.Rect(cx + 210, cy + 240, 140, 40)
+        self.desenhar_botao(self.ui_rects['btn_confirmar_carro'], "CRIAR", COR_BTN_ACAO)
+        self.desenhar_botao(self.ui_rects['btn_cancelar'], "CANCELAR", (100, 100, 100))
+
+    def desenhar_form_pedido(self):
+        self._desenhar_fundo_modal()
+        w, h = 400, 320
+        cx, cy = LARGURA_TOTAL//2 - w//2, ALTURA//2 - h//2
+        rect_janela = pygame.Rect(cx, cy, w, h)
+        self._desenhar_janela(rect_janela)
+        self.screen.blit(self.font_titulo.render("NOVO PEDIDO", True, COR_TEXTO), (cx + 40, cy + 20))
+        # Origem
+        self.screen.blit(self.font_texto.render("Origem:", True, COR_TEXTO), (cx + 50, cy + 60))
+        self.ui_rects['input_origem'] = pygame.Rect(cx + 50, cy + 80, 200, 35)
+        self.ui_rects['btn_sel_origem'] = pygame.Rect(cx + 260, cy + 80, 90, 35)
+        self._desenhar_input(self.ui_rects['input_origem'], self.input_pedido_origem, self.campo_focado == 'pedido_origem')
+        self.desenhar_botao(self.ui_rects['btn_sel_origem'], "Mapa", COR_BTN_SELECIONAR, pequena_fonte=True)
+        # Destino
+        self.screen.blit(self.font_texto.render("Destino:", True, COR_TEXTO), (cx + 50, cy + 130))
+        self.ui_rects['input_destino'] = pygame.Rect(cx + 50, cy + 150, 200, 35)
+        self.ui_rects['btn_sel_destino'] = pygame.Rect(cx + 260, cy + 150, 90, 35)
+        self._desenhar_input(self.ui_rects['input_destino'], self.input_pedido_destino, self.campo_focado == 'pedido_destino')
+        self.desenhar_botao(self.ui_rects['btn_sel_destino'], "Mapa", COR_BTN_SELECIONAR, pequena_fonte=True)
+        # Ações
+        self.ui_rects['btn_confirmar_pedido'] = pygame.Rect(cx + 50, cy + 240, 140, 40)
+        self.ui_rects['btn_cancelar'] = pygame.Rect(cx + 210, cy + 240, 140, 40)
+        self.desenhar_botao(self.ui_rects['btn_confirmar_pedido'], "CRIAR", COR_BTN_ACAO)
+        self.desenhar_botao(self.ui_rects['btn_cancelar'], "CANCELAR", (100, 100, 100))
+
+    def _desenhar_fundo_modal(self):
+        s = pygame.Surface((LARGURA_TOTAL, ALTURA))
+        s.set_alpha(180)
+        s.fill((0,0,0))
+        self.screen.blit(s, (0,0))
+
+    def _desenhar_janela(self, rect):
+        pygame.draw.rect(self.screen, (60, 60, 70), rect, border_radius=10)
+        pygame.draw.rect(self.screen, (255, 255, 255), rect, 2, border_radius=10)
+
+    def _desenhar_input(self, rect, texto, focado):
+        cor_box = (255, 255, 255) if focado else (200, 200, 200)
+        pygame.draw.rect(self.screen, cor_box, rect, border_radius=5)
+        txt_surf = self.font_titulo.render(texto, True, (0,0,0))
+        self.screen.blit(txt_surf, (rect.x + 5, rect.y + 5))
 
     def desenhar_barra_lateral(self, dados):
-        # Fundo e Linha
         pygame.draw.rect(self.screen, COR_FUNDO_BARRA, (LARGURA_MAPA, 0, LARGURA_BARRA, ALTURA))
         pygame.draw.line(self.screen, COR_SEPARADOR, (LARGURA_MAPA, 0), (LARGURA_MAPA, ALTURA), 2)
 
         x = LARGURA_MAPA + 20
         y = 15
         
-        # Cabeçalho e Filtros
         self.screen.blit(self.font_titulo.render("CONTROLO E FILTROS", True, COR_TEXTO), (x, y))
         
-        nomes_filtro = {'veiculos': "CARROS", 'pedidos': "PEDIDOS", 'transito': "ROTAS", 'tempo': "TEMPO"}
+        nomes_filtro = {
+            'veiculos': "CARROS", 'pedidos': "PEDIDOS", 'rotas': "ROTAS", 
+            'tempo': "TEMPO", 'transito': "VER TRÂNSITO"
+        }
         for k, r in self.botoes_filtro.items():
             cor = COR_BTN_ATIVO if self.filtros[k] else COR_BTN_INATIVO
             self.desenhar_botao(r, nomes_filtro[k], cor)
 
-        y = 150
+        y = 180
         pygame.draw.line(self.screen, COR_SEPARADOR, (x, y), (LARGURA_TOTAL-20, y), 1)
         y += 20
 
-        # --- LISTAS (Ocupam o meio do ecrã) ---
-        area_listas = ALTURA - 100 - y # Espaço disponível
-        
         if self.filtros['tempo']:
             self.screen.blit(self.font_titulo.render(f"HORA: {dados.get('tempo')}", True, COR_TEXTO), (x, y))
             y += 30
@@ -222,7 +418,6 @@ class Gui:
                 self.screen.blit(self.font_texto.render(f"{p['id']}: {p['origem']}->{p['destino']}", True, COR_TEXTO), (x, y))
                 y += 15
 
-        # --- BOTÕES DE AÇÃO (Fundo fixo) ---
         self.desenhar_botao(self.btn_novo_carro, "+ CARRO", COR_BTN_ACAO)
         self.desenhar_botao(self.btn_novo_pedido, "+ PEDIDO", COR_BTN_ACAO)
 
@@ -231,26 +426,26 @@ class Gui:
 
         acoes = self.processar_eventos()
         
-        self.screen.fill(COR_FUNDO_MAPA)
+        # --- 1. Desenhar o Mapa (COM CACHE) ---
+        # Verifica se o estado do trânsito mudou para regenerar o cache se necessário
+        estado_atual_transito = self.filtros.get('transito')
         
-        # 1. Mapa e Entidades
-        # (Mapa)
-        for o, a in self.grafo.arestas.items():
-            if o in self.grafo.nos:
-                p1 = self.to_screen(self.grafo.nos[o].coords)
-                for d in a:
-                    if d in self.grafo.nos:
-                        pygame.draw.line(self.screen, COR_ARESTAS, p1, self.to_screen(self.grafo.nos[d].coords), 1)
+        if self.cache_mapa_surface is None or self.ultimo_estado_transito != estado_atual_transito:
+            self._gerar_cache_mapa()
+            self.ultimo_estado_transito = estado_atual_transito
+            
+        # Cola a imagem pré-renderizada
+        self.screen.blit(self.cache_mapa_surface, (0, 0))
         
-        # (Rotas)
-        if self.filtros['transito']:
+        # --- 2. Rotas ---
+        if self.filtros['rotas']:
             for v in dados.get('veiculos', []):
                 rota = v.get('rota', [])
                 if len(rota) > 1:
                     pts = [self.to_screen(self.grafo.nos[n].coords) for n in rota if n in self.grafo.nos]
                     if len(pts) > 1: pygame.draw.lines(self.screen, COR_ROTA, False, pts, 3)
 
-        # (Pedidos)
+        # --- 3. Entidades ---
         if self.filtros['pedidos']:
             for p in dados.get('pedidos', []):
                 if p['origem'] in self.grafo.nos:
@@ -258,19 +453,31 @@ class Gui:
                     pygame.draw.circle(self.screen, COR_PEDIDO, pos, 6)
                     pygame.draw.circle(self.screen, (255,255,255), pos, 6, 1)
 
-        # (Carros)
         if self.filtros['veiculos']:
             for v in dados.get('veiculos', []):
                 if v['pos'] in self.grafo.nos:
                     pos = self.to_screen(self.grafo.nos[v['pos']].coords)
                     cor = COR_VEICULO_OCUPADO if v['ocupado'] else COR_VEICULO_LIVRE
                     pygame.draw.circle(self.screen, cor, pos, 8)
+        
+        # --- 4. Modo de Seleção ---
+        if self.modo_selecao:
+            texto_aviso = "SELECIONE UM PONTO NO MAPA"
+            aviso_surf = self.font_titulo.render(texto_aviso, True, (255, 255, 0))
+            self.screen.blit(aviso_surf, (LARGURA_MAPA // 2 - 100, 20))
 
-        # 2. Interface
+        # --- 5. Interface ---
         self.desenhar_barra_lateral(dados)
-        self.desenhar_popup() # Desenha o popup por cima de tudo se estiver ativo
+        
+        if self.popup_ativo == 'form_carro':
+            self.desenhar_form_carro()
+        elif self.popup_ativo == 'form_pedido':
+            self.desenhar_form_pedido()
+        else:
+            self.desenhar_popup_inicial()
 
         pygame.display.flip()
-        self.clock.tick(30)
         
+        # Garante 30 FPS na interface gráfica
+        self.clock.tick(30)
         return acoes
