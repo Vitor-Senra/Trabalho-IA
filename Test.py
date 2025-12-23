@@ -1,3 +1,4 @@
+import sys
 import osmnx as ox
 import json
 import os
@@ -17,7 +18,7 @@ def perlin(x, y, scale=0.1, octaves=6):
         base=0
     )
 
-def gerar_json_rede_viaria(localizacao="Barcelos, Portugal", ficheiro_saida="src/data/cidade.json"):
+def gerar_json_rede_viaria(localizacao="Porto, Portugal", ficheiro_saida="src/data/cidade.json"):
     print(f"1. A baixar rede viária de '{localizacao}'...")
     
     # Baixar apenas ruas transitáveis por carros
@@ -42,8 +43,8 @@ def gerar_json_rede_viaria(localizacao="Barcelos, Portugal", ficheiro_saida="src
     # Reverter projeção para ter Latitude/Longitude corretas
     G_proj = ox.project_graph(G, to_crs="EPSG:4326")
     # --- PROCESSAR NÓS ---
-    percentagem_estacao_recarga = 3  # 3% estações de recarga
-    percentagem_posto_abastecimento = 6  # 6% bombas de gasolina
+    percentagem_estacao_recarga = 1  # 1% estações de recarga
+    percentagem_posto_abastecimento = 3  # 3% bombas de gasolina
     for no_id, dados in G_proj.nodes(data=True):
         # SIMPLIFICAÇÃO: Todos os nós são apenas locais de passagem/recolha
         # Não criamos estações de recarga nem bombas de gasolina
@@ -106,4 +107,8 @@ def gerar_json_rede_viaria(localizacao="Barcelos, Portugal", ficheiro_saida="src
     print(f"Total de Arestas: {len(dados_projeto['arestas'])}")
 
 if __name__ == "__main__":
-    gerar_json_rede_viaria("Porto, Portugal")
+    if len(sys.argv) > 1:
+        local = sys.argv[1]
+        gerar_json_rede_viaria(local)
+    else:
+        gerar_json_rede_viaria()
