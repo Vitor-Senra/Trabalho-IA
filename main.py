@@ -63,14 +63,11 @@ def main():
     while gui.running:
         agora = time.time()
         
-        # A. Atualiza Lógica (apenas se passou 1 segundo)
         if agora - ultimo_passo_simulacao >= INTERVALO_SIMULACAO:
             sim.correr_passo()
-            dados = get_dados_visuais(sim) # Atualiza dados apenas quando simulação muda
+            dados = get_dados_visuais(sim)
             ultimo_passo_simulacao = agora
         
-        # B. Desenha e RECEBE AÇÕES DO UTILIZADOR (Corre a 30 FPS)
-        # O clock.tick(30) está dentro do gui.desenhar
         acoes = gui.desenhar(dados)
         
         # C. Processar Ações da GUI
@@ -125,9 +122,7 @@ def main():
                     sim.gerar_pedido_aleatorio()
                     print("Pedido Aleatório Gerado!")
                     dados = get_dados_visuais(sim)
-        
-        # NOTA: O time.sleep(1) foi removido para não bloquear a GUI.
-        # O controlo de velocidade é feito pelo if no início do loop.
+                    
 
 if __name__ == "__main__":
     main()

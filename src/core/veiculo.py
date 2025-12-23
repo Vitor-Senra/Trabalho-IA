@@ -162,7 +162,7 @@ class Veiculo:
             pedido: Objeto Pedido associado
             destino: Nó de destino
         """
-        self.estado = EstadoVeiculo.EM_SERVICO
+        self.estado = EstadoVeiculo.A_CAMINHO
         self.pedido_atual = pedido
         self.destino_atual = destino
         self.passageiros_atuais = pedido.num_passageiros
@@ -296,7 +296,7 @@ class Veiculo:
         self.proximo_no_index = 1
         self.progresso_aresta = 0.0  # 0% a 100% entre o nó atual e o próximo
 
-    def atualizar_posicao(self, velocidade_simulacao):
+    def atualizar_posicao(self, velocidade_simulacao)-> bool:
         """Chamado a cada frame pelo Simulador"""
         if not self.rota_atual: return
 
@@ -312,4 +312,5 @@ class Veiculo:
             # Se terminou a rota
             if self.proximo_no_index >= len(self.rota_atual):
                 self.rota_atual = []
-                self.estado = EstadoVeiculo.DISPONIVEL
+                return True
+        return False  # Indica que não chegou ao destino ainda

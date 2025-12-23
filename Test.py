@@ -73,8 +73,7 @@ def gerar_json_rede_viaria(localizacao="Barcelos, Portugal", ficheiro_saida="src
             (perlin(ux, uy, scale=0.005) +
             perlin(vx, vy, scale=0.005)) / 2
         ) * 2 + 1 # Varia entre -1 e 3 com media 1.0
-        fator = max(0.7, fator)  # Limitar entre 0.7x e 1.3x
-
+        fator = max(0.7, fator)  # Limitar entre 0.7x e 3x
 
         dados_projeto["arestas"].append({
             "origem": str(u),

@@ -152,9 +152,41 @@ class Simulador:
 
 
         for veiculo in self.estado.veiculos.values():
-            if veiculo.estado is EstadoVeiculo.EM_SERVICO:
-                veiculo.atualizar_posicao(10)
+            if veiculo.estado is EstadoVeiculo.DISPONIVEL:
+                continue
 
+            chegou = veiculo.atualizar_posicao(10)
+            if chegou:
+                if veiculo.estado == EstadoVeiculo.A_CAMINHO:
+                    
+                    veiculo.estado = EstadoVeiculo.EM_SERVICO
+                    veiculo.pedido_atual.iniciar_viagem()
+                    
+                    # CALCULAR NOVA ROTA: Daqui (Origem Pedido) -> Destino Pedido
+                    resultado_viagem = astar(
+                        self.grafo, 
+                        veiculo.localizacao,
+                        veiculo.pedido_atual.destino, 
+                        metrica='tempo'
+                    )
+                
+                    if resultado_viagem.sucesso:
+                        veiculo.definir_rota(resultado_viagem.caminho)
+                    else:
+                        print(f"[ERRO] Caminho bloqueado para destino {veiculo.pedido_atual.destino}")
+                        veiculo.estado = EstadoVeiculo.DISPONIVEL
+                        veiculo.pedido_atual = None
+                        
+
+                elif veiculo.estado == EstadoVeiculo.EM_SERVICO:
+                    
+                    #distancia = veiculo.pedido_atual.calcular_distancia(self.grafo)
+                    #custo = distancia * veiculo.custo_por_km
+                    
+                    # Libertar veículo e finalizar pedido
+                    #self.estado.concluir_pedido(veiculo.pedido_atual, distancia, custo)
+                    veiculo.estado = EstadoVeiculo.DISPONIVEL
+                    veiculo.pedido_atual = None
 
     def correr_passo(self):
         """Avança 1 minuto na simulação"""
