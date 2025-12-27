@@ -6,6 +6,9 @@ from src.core.veiculo import EstadoVeiculo, Veiculo, TipoVeiculo
 from src.core.pedido import Pedido
 from src.core.estado import Estado
 from src.algorithms.informados.astar import astar
+from datetime import datetime
+from src.core.veiculo import TipoVeiculo
+from src.core.pedido import PreferenciaAmbiental
 import heapq
 
 class Simulador:
@@ -16,7 +19,7 @@ class Simulador:
         # Criar 3 Veículos de teste em nós aleatórios do mapa
         nos_mapa = list(self.grafo.nos.keys())
         frota_temp = {} 
-        for i in range(1):
+        for i in range(3):
             vid = f"V{i+1}"
             tipo = TipoVeiculo.ELETRICO if i % 2 == 0 else TipoVeiculo.COMBUSTAO
             local = random.choice(nos_mapa)
@@ -152,7 +155,7 @@ class Simulador:
                     #custo = distancia * veiculo.custo_por_km
                     
                     # Libertar veículo e finalizar pedido
-                    #self.estado.concluir_pedido(veiculo.pedido_atual, distancia, custo)
+                    self.estado.concluir_pedido(veiculo.pedido_atual, 5, 10)
                     veiculo.estado = EstadoVeiculo.DISPONIVEL
                     veiculo.pedido_atual = None
 
@@ -161,7 +164,7 @@ class Simulador:
         self.tempo_atual += timedelta(minutes=1)
         
         # 1. Gerar novos pedidos aleatórios
-        #self.gerar_pedido_aleatorio()
+        self.gerar_pedido_aleatorio()
         
         # 2. Processar a fila com a nova inteligência
         self.processar_atribuicoes_inteligente()
@@ -169,46 +172,11 @@ class Simulador:
         # 3. (Opcional) Atualizar movimento físico dos carros
         self.atualizar_movimento_veiculos()
 
-
-    
-    def _heuristica_estado(self, estado_node):
-        """
-        Estima o custo restante para concluir todos os pedidos pendentes neste estado.
-        Heurística: Soma das distâncias (Pickup + Viagem) de todos os pedidos por atender,
-        assumindo que o carro mais próximo trata de cada um (Relaxamento).
-        """
-        custo_estimado = 0
-        veiculos_disponiveis = estado_node.obter_veiculos_disponiveis()
-        
-        if not veiculos_disponiveis and estado_node.pedidos_pendentes:
-             # Penalização alta se há pedidos mas não há carros
-            return len(estado_node.pedidos_pendentes) * 1000 
-
-        for pedido in estado_node.pedidos_pendentes:
-            # 1. Estimar custo de Pickup (distância do carro livre mais próximo)
-            min_dist_pickup = float('inf')
-            for v in veiculos_disponiveis:
-                d = estado_node.grafo.distancia_euclidiana(v.localizacao, pedido.origem)
-                if d < min_dist_pickup:
-                    min_dist_pickup = d
-            
-            # Se não houver carros, usar uma constante de penalização
-            if min_dist_pickup == float('inf'):
-                min_dist_pickup = 50.0
-
-            # 2. Custo da Viagem Real
-            dist_viagem = estado_node.grafo.distancia_euclidiana(pedido.origem, pedido.destino)
-            
-            custo_estimado += (min_dist_pickup + dist_viagem)
-            
-        return custo_estimado
-
     def processar_atribuicoes_inteligente(self):
         """
         Planeamento de Frota usando A* no Espaço de Estados.
         Procura a melhor ação (atribuição) que leva a um estado com menor custo global.
         """
-        import heapq # Necessário para a fila de prioridade
         
         # Se não há nada para gerir, sai
         if not self.estado.pedidos_pendentes or not self.estado.obter_veiculos_disponiveis():
@@ -305,3 +273,82 @@ class Simulador:
         else:
             # Fallback: Se o planeamento falhar, não faz nada neste turno
             pass
+
+
+    def _heuristica_estado(self, estado_node):
+        """
+        Heurística Multiobjetivo Completa:
+        1. Distância (Pickup + Viagem)
+        2. Custo financeiro (Custo/km)
+        3. Penalizações por recarga (Autonomia)
+        4. Preferências do cliente (Eco)
+        5. Capacidade (Filtro)
+        6. URGÊNCIA TEMPORAL (Evita que clientes esperem demasiado)
+        """
+        custo_estimado_total = 0
+        veiculos_disponiveis = estado_node.obter_veiculos_disponiveis()
+        
+        # Se há pedidos mas não há carros, penalização máxima
+        if not veiculos_disponiveis and estado_node.pedidos_pendentes:
+            return float('inf')
+
+        # Data atual da simulação (do estado, não do sistema real)
+        agora = estado_node.timestamp
+
+        for pedido in estado_node.pedidos_pendentes:
+            min_custo_para_este_pedido = float('inf')
+            
+            # Quanto mais tempo passou, maior o multiplicador de custo
+            tempo_espera_min = (agora - pedido.timestamp).total_seconds() / 60.0
+            
+            # Fator de crescimento exponencial suave:
+            # 0 min espera -> fator 1.0
+            # 15 min espera -> fator 1.5
+            # 30 min espera -> fator 2.0
+            # ...
+            fator_urgencia = 1.0 + (tempo_espera_min / 30.0) 
+                
+            for veiculo in veiculos_disponiveis:
+                # 1. Filtro de Capacidade
+                if veiculo.capacidade < pedido.num_passageiros:
+                    continue 
+                
+                # 2. Distâncias
+                dist_pickup = estado_node.grafo.distancia_euclidiana(veiculo.localizacao, pedido.origem)
+                dist_viagem = estado_node.grafo.distancia_euclidiana(pedido.origem, pedido.destino)
+                dist_total = dist_pickup + dist_viagem
+                
+                # 3. Custo Operacional Base
+                custo_base = dist_total * veiculo.custo_por_km
+                
+                # 4. Autonomia
+                penalizacao_recarga = 0
+                if veiculo.tipo == TipoVeiculo.ELETRICO:
+                    if veiculo.autonomia_atual < (dist_total * 1.1):
+                        estacao = estado_node.grafo.obter_estacao_recarga_mais_proxima(veiculo.localizacao)
+                        if estacao:
+                            dist_recarga = estado_node.grafo.distancia_euclidiana(veiculo.localizacao, estacao)
+                            if veiculo.type_str == "ELETRICO":
+                                penalizacao_recarga = (dist_recarga * veiculo.custo_por_km) + 50.0
+                            else:
+                                penalizacao_recarga = (dist_recarga * veiculo.custo_por_km) + 10.0
+                        else:
+                            penalizacao_recarga = 500.0
+
+                # 5. Preferências
+                penalizacao_pref = 0
+                if pedido.preferencia_ambiental == PreferenciaAmbiental.APENAS_ELETRICO and veiculo.tipo != TipoVeiculo.ELETRICO:
+                    penalizacao_pref = 1000.0
+                elif pedido.preferencia_ambiental == PreferenciaAmbiental.PREFERENCIA_ELETRICO and veiculo.tipo != TipoVeiculo.ELETRICO:
+                    penalizacao_pref = 100.0
+
+                # Aplicamos o fator de urgência ao custo operacional e de distância
+                # As penalizações fixas (bateria/preferencia) somam-se à parte
+                custo_opcao = (custo_base * fator_urgencia) + penalizacao_recarga + penalizacao_pref
+                
+                if custo_opcao < min_custo_para_este_pedido:
+                    min_custo_para_este_pedido = custo_opcao
+
+            custo_estimado_total += min_custo_para_este_pedido
+
+        return custo_estimado_total

@@ -29,7 +29,8 @@ COR_NOS_PADRAO = (100, 100, 100)
 COR_VEICULO_LIVRE = (0, 255, 0)
 COR_VEICULO_OCUPADO = (255, 50, 50)
 COR_PEDIDO = (0, 200, 255)
-COR_ROTA = (0, 200, 255)
+COR_ROTA_RECOLHA = (255, 0, 255)
+COR_ROTA_ENTREGA = (0, 255, 127)
 
 # Cores UI
 COR_TEXTO = (255, 255, 255)
@@ -461,9 +462,23 @@ class Gui:
         if self.filtros['rotas']:
             for v in dados.get('veiculos', []):
                 rota = v.get('rota', [])
+                
                 if len(rota) > 1:
+                    # Converter nós em coordenadas de ecrã
                     pts = [self.to_screen(self.grafo.nos[n].coords) for n in rota if n in self.grafo.nos]
-                    if len(pts) > 1: pygame.draw.lines(self.screen, COR_ROTA, False, pts, 3)
+                    
+                    if len(pts) > 1:
+                        # --- NOVA LÓGICA DE COR ---
+                        estado = v.get('estado_texto', '') # Vem do main.py (ex: "A_CAMINHO")
+                        
+                        if estado == "A_CAMINHO":
+                            cor_atual = COR_ROTA_RECOLHA
+                        elif estado == "EM_SERVICO":
+                            cor_atual = COR_ROTA_ENTREGA
+                        else:
+                            cor_atual = (100, 100, 100) # Cinzento para outros movimentos (ex: ir carregar)
+                            
+                        pygame.draw.lines(self.screen, cor_atual, False, pts, 3)
 
         # --- 3. Entidades ---
         if self.filtros['pedidos']:
