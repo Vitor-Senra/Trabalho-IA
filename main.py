@@ -102,22 +102,12 @@ def main():
             # --- 3. BOTÕES RÁPIDOS (Aleatório) ---
             elif acao == "add_carro":
                 if parametros == "random":
-                    import random
-                    from src.core.veiculo import TipoVeiculo, Veiculo
                     
                     if not sim.grafo.nos:
                         print("Erro: Grafo vazio.")
                         continue
-                        
-                    nos = list(sim.grafo.nos.keys())
-                    vid = f"V_Rand_{len(sim.estado.veiculos)+1}"
-                    tipo_v = TipoVeiculo.ELETRICO if random.random() > 0.5 else TipoVeiculo.COMBUSTAO
-                    
-                    novo_veiculo = Veiculo(vid, tipo_v, 300, 4, 0.5, random.choice(nos))
-                    sim.estado.veiculos[vid] = novo_veiculo
-                    print(f"Carro Aleatório {vid} Adicionado!")
+                    sim.gerar_carro_aleatorio()
                     dados = get_dados_visuais(sim)
-
             elif acao == "add_pedido":
                 if parametros == "random":
                     sim.gerar_pedido_aleatorio()

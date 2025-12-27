@@ -2,6 +2,8 @@ from enum import Enum
 from typing import Optional
 from datetime import datetime, timedelta
 
+from src.core.veiculo import VeiculoEletrico
+
 
 class PrioridadePedido(Enum):
     """Níveis de prioridade dos pedidos"""
@@ -198,13 +200,12 @@ class Pedido:
         
         # Bonus por atender preferência ambiental
         if self.veiculo_atribuido:
-            from .veiculo import TipoVeiculo
             
             if self.preferencia_ambiental == PreferenciaAmbiental.PREFERENCIA_ELETRICO:
-                if self.veiculo_atribuido.tipo == TipoVeiculo.ELETRICO:
+                if isinstance(self.veiculo_atribuido, VeiculoEletrico):
                     satisfacao += 10
             elif self.preferencia_ambiental == PreferenciaAmbiental.APENAS_ELETRICO:
-                if self.veiculo_atribuido.tipo != TipoVeiculo.ELETRICO:
+                if not isinstance(self.veiculo_atribuido, VeiculoEletrico):
                     satisfacao -= 20
         
         # Ajustar por prioridade (clientes premium esperam mais)
@@ -257,11 +258,9 @@ class Pedido:
             
         Returns:
             bool: True se aceita, False caso contrário
-        """
-        from .veiculo import TipoVeiculo
-        
+        """     
         if self.preferencia_ambiental == PreferenciaAmbiental.APENAS_ELETRICO:
-            return veiculo.tipo == TipoVeiculo.ELETRICO
+            return isinstance(veiculo, VeiculoEletrico)
         
         return True
     
@@ -287,7 +286,7 @@ class Pedido:
         
         if self.veiculo_atribuido:
             stats['veiculo_id'] = self.veiculo_atribuido.id
-            stats['tipo_veiculo'] = self.veiculo_atribuido.tipo.value
+            stats['tipo_veiculo'] = self.veiculo_atribuido.tipo_str()
         
         if self.foi_concluido():
             stats['distancia_km'] = round(self.distancia_percorrida, 2)

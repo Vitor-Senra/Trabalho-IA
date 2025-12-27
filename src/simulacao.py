@@ -2,7 +2,7 @@ import time
 import random
 from datetime import datetime, timedelta
 from src.core.grafo import Grafo
-from src.core.veiculo import EstadoVeiculo, Veiculo, TipoVeiculo
+from src.core.veiculo import EstadoVeiculo, Veiculo, VeiculoCombustao, VeiculoEletrico
 from src.core.pedido import Pedido
 from src.core.estado import Estado
 from src.algorithms.informados.astar import astar
@@ -16,11 +16,13 @@ class Simulador:
         # Criar 3 Veículos de teste em nós aleatórios do mapa
         nos_mapa = list(self.grafo.nos.keys())
         frota_temp = {} 
-        for i in range(1):
+        for i in range(3):
             vid = f"V{i+1}"
-            tipo = TipoVeiculo.ELETRICO if i % 2 == 0 else TipoVeiculo.COMBUSTAO
             local = random.choice(nos_mapa)
-            frota_temp[vid] = Veiculo(vid, tipo, 300, 4, 0.5, local)
+            if i % 2 == 0:
+                frota_temp[vid] = VeiculoCombustao(vid, 300, 4, 0.5, local)
+            else:
+                frota_temp[vid] = VeiculoEletrico(vid, 300, 4, 0.5, local)
 
         self.pedidos_pendentes = []
         self.tempo_atual = datetime.now()
@@ -41,29 +43,20 @@ class Simulador:
     def gerar_carro_aleatorio(self):
         nos = list(self.grafo.nos.keys())
         vid = f"V_Rand_{len(self.estado.veiculos)+1}"
-        tipo = random.choice([TipoVeiculo.ELETRICO, TipoVeiculo.COMBUSTAO])
+        tipo = random.choice(["eletrico", "combustao"])
         local = random.choice(nos)
-        novo_veiculo = Veiculo(vid, tipo, 300, 4, 0.5, local)
+        if tipo == "eletrico":
+            novo_veiculo = VeiculoEletrico(vid, 300, 4, 0.5, local)
+        elif tipo == "combustao":
+            novo_veiculo = VeiculoCombustao(vid, 300, 4, 1.0, local)
         self.estado.veiculos[vid] = novo_veiculo
-        print(f"[VEÍCULO] Novo veículo {vid} do tipo {tipo.name} adicionado em {local}")
-
+        print(f"[VEÍCULO] Novo veículo {vid} do tipo {tipo} adicionado em {local}")
     def criar_veiculo_manual(self, tipo_str, no_inicial, capacidade=4, autonomia=300):
         """Cria um veículo com parâmetros específicos"""
         # 1. Validar Tipo
         tipo_str = tipo_str.lower()
         custo_km = 0.5
         tipo_enum = None
-        
-        if tipo_str == "eletrico":
-            tipo_enum = TipoVeiculo.ELETRICO
-            custo_km = 0.5
-        elif tipo_str == "combustao":
-            tipo_enum = TipoVeiculo.COMBUSTAO
-            custo_km = 1.0 # Mais caro por km
-        else:
-            print(f"Erro: Tipo '{tipo_str}' inválido.")
-            return
-
         # 2. Validar Nó
         if no_inicial not in self.grafo.nos:
             print(f"Erro: Nó '{no_inicial}' não existe.")
@@ -72,15 +65,25 @@ class Simulador:
         # 3. Criar e Adicionar
         vid = f"V_Man_{len(self.estado.veiculos)+1}"
         
-        # Instancia usando os valores passados
-        novo_veiculo = Veiculo(
-            id=vid, 
-            tipo=tipo_enum, 
-            autonomia_max=autonomia, 
-            capacidade=capacidade, 
-            custo_por_km=custo_km, 
-            localizacao=no_inicial
-        )
+        if tipo_str == "eletrico":
+            novo_veiculo = VeiculoEletrico(
+                id=vid,
+                autonomia_max=autonomia, 
+                capacidade=capacidade, 
+                custo_por_km=0.5, 
+                localizacao=no_inicial
+            )
+        elif tipo_str == "combustao":
+            novo_veiculo = VeiculoCombustao(
+                id=vid,
+                autonomia_max=autonomia, 
+                capacidade=capacidade, 
+                custo_por_km=1.0,
+                localizacao=no_inicial
+            )
+        else:
+            print(f"Erro: Tipo '{tipo_str}' inválido.")
+            return
         
         self.estado.veiculos[vid] = novo_veiculo
         print(f"[SUCESSO] Veículo {vid} ({tipo_str}) criado em {no_inicial}.")
@@ -147,12 +150,11 @@ class Simulador:
                         
 
                 elif veiculo.estado == EstadoVeiculo.EM_SERVICO:
-                    
-                    #distancia = veiculo.pedido_atual.calcular_distancia(self.grafo)
+                    # TODO: Finalizar pedido
+                    #distancia = veiculo.pedido_atual.calcular_distancia_percorrida(self.grafo)
                     #custo = distancia * veiculo.custo_por_km
-                    
                     # Libertar veículo e finalizar pedido
-                    #self.estado.concluir_pedido(veiculo.pedido_atual, distancia, custo)
+                    self.estado.concluir_pedido(veiculo.pedido_atual, 5, 5)  # Valores fictícios de tempo e custo
                     veiculo.estado = EstadoVeiculo.DISPONIVEL
                     veiculo.pedido_atual = None
 
@@ -161,7 +163,7 @@ class Simulador:
         self.tempo_atual += timedelta(minutes=1)
         
         # 1. Gerar novos pedidos aleatórios
-        #self.gerar_pedido_aleatorio()
+        self.gerar_pedido_aleatorio()
         
         # 2. Processar a fila com a nova inteligência
         self.processar_atribuicoes_inteligente()

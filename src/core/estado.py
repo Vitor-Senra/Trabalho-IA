@@ -1,6 +1,8 @@
 from typing import List, Dict, Optional, Set
 from datetime import datetime
 from copy import deepcopy
+
+from src.core.veiculo import VeiculoEletrico
 from .pedido import PrioridadePedido
 
 
@@ -49,7 +51,7 @@ class Estado:
         
         self.num_veiculos_eletricos = sum(
             1 for v in self.veiculos.values() 
-            if v.tipo.value == "eletrico"
+            if isinstance(v, VeiculoEletrico)
         )
         
         self.num_veiculos_combustao = len(self.veiculos) - self.num_veiculos_eletricos
