@@ -346,15 +346,27 @@ class Estado:
         acoes = []
         veiculos_disp = self.obter_veiculos_disponiveis()
         
+        VELOCIDADE_MEDIA_KMH = 40.0
+        
         for pedido in self.pedidos_pendentes:
+            tempo_decorrido = (self.timestamp - pedido.timestamp).total_seconds() / 60.0
+            
+            if tempo_decorrido > pedido.tempo_espera_maximo:
+                continue
+
             for veiculo in veiculos_disp:
-                # Estimar distância até origem do pedido
+                # Estimar distância até à origem do pedido (onde está o cliente)
                 dist_origem = self.grafo.distancia_euclidiana(
                     veiculo.localizacao, 
                     pedido.origem
                 )
                 
-                # Estimar distância da viagem
+                tempo_ate_cliente = (dist_origem / VELOCIDADE_MEDIA_KMH) * 60.0
+                
+                if (tempo_decorrido + tempo_ate_cliente) > pedido.tempo_espera_maximo:
+                    continue  # Este carro não serve, tenta o próximo
+
+                # Estimar distância da viagem (do cliente ao destino)
                 dist_viagem = self.grafo.distancia_euclidiana(
                     pedido.origem, 
                     pedido.destino
@@ -362,8 +374,9 @@ class Estado:
                 
                 dist_total = dist_origem + dist_viagem
                 
-                # Verificar se veículo pode atender
+                # Verificar se veículo pode atender (autonomia e capacidade)
                 if veiculo.pode_atender_pedido(pedido.num_passageiros, dist_total):
+                    # Verificar preferências do cliente (ex: quer elétrico?)
                     if pedido.aceita_veiculo(veiculo):
                         acoes.append({
                             'tipo': 'atribuir',
