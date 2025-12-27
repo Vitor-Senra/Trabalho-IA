@@ -2,12 +2,11 @@ import time
 import random
 from datetime import datetime, timedelta
 from src.core.grafo import Grafo
-from src.core.veiculo import EstadoVeiculo, Veiculo, VeiculoCombustao, VeiculoEletrico
+from src.core.veiculo import EstadoVeiculo, VeiculoCombustao, VeiculoEletrico
 from src.core.pedido import Pedido
 from src.core.estado import Estado
 from src.algorithms.informados.astar import astar
 from datetime import datetime
-from src.core.veiculo import TipoVeiculo
 from src.core.pedido import PreferenciaAmbiental
 import heapq
 
@@ -277,7 +276,7 @@ class Simulador:
             pass
 
 
-    def _heuristica_estado(self, estado_node):
+    def _heuristica_estado(self, estado):
         """
         Heurística Multiobjetivo Completa:
         1. Distância (Pickup + Viagem)
@@ -288,16 +287,15 @@ class Simulador:
         6. URGÊNCIA TEMPORAL (Evita que clientes esperem demasiado)
         """
         custo_estimado_total = 0
-        veiculos_disponiveis = estado_node.obter_veiculos_disponiveis()
+        veiculos_disponiveis = estado.obter_veiculos_disponiveis()
         
         # Se há pedidos mas não há carros, penalização máxima
-        if not veiculos_disponiveis and estado_node.pedidos_pendentes:
-            return float('inf')
-
+        if not veiculos_disponiveis and estado.pedidos_pendentes:
+            return len(estado.pedidos_pendentes) * 10000.0
         # Data atual da simulação (do estado, não do sistema real)
-        agora = estado_node.timestamp
+        agora = estado.timestamp
 
-        for pedido in estado_node.pedidos_pendentes:
+        for pedido in estado.pedidos_pendentes:
             min_custo_para_este_pedido = float('inf')
             
             # Quanto mais tempo passou, maior o multiplicador de custo
@@ -316,37 +314,37 @@ class Simulador:
                     continue 
                 
                 # 2. Distâncias
-                dist_pickup = estado_node.grafo.distancia_euclidiana(veiculo.localizacao, pedido.origem)
-                dist_viagem = estado_node.grafo.distancia_euclidiana(pedido.origem, pedido.destino)
+                dist_pickup = estado.grafo.distancia_euclidiana(veiculo.localizacao, pedido.origem)
+                dist_viagem = estado.grafo.distancia_euclidiana(pedido.origem, pedido.destino)
                 dist_total = dist_pickup + dist_viagem
                 
                 # 3. Custo Operacional Base
                 custo_base = dist_total * veiculo.custo_por_km
                 
-                # 4. Autonomia
+                """  # 4. Autonomia
                 penalizacao_recarga = 0
                 if veiculo.tipo == TipoVeiculo.ELETRICO:
                     if veiculo.autonomia_atual < (dist_total * 1.1):
-                        estacao = estado_node.grafo.obter_estacao_recarga_mais_proxima(veiculo.localizacao)
+                        estacao = estado.grafo.obter_estacao_recarga_mais_proxima(veiculo.localizacao)
                         if estacao:
-                            dist_recarga = estado_node.grafo.distancia_euclidiana(veiculo.localizacao, estacao)
+                            dist_recarga = estado.grafo.distancia_euclidiana(veiculo.localizacao, estacao)
                             if veiculo.type_str == "ELETRICO":
                                 penalizacao_recarga = (dist_recarga * veiculo.custo_por_km) + 50.0
                             else:
                                 penalizacao_recarga = (dist_recarga * veiculo.custo_por_km) + 10.0
                         else:
-                            penalizacao_recarga = 500.0
+                            penalizacao_recarga = 500.0 """
 
                 # 5. Preferências
                 penalizacao_pref = 0
-                if pedido.preferencia_ambiental == PreferenciaAmbiental.APENAS_ELETRICO and veiculo.tipo != TipoVeiculo.ELETRICO:
+                if pedido.preferencia_ambiental == PreferenciaAmbiental.APENAS_ELETRICO and not isinstance(veiculo, VeiculoEletrico):
                     penalizacao_pref = 1000.0
-                elif pedido.preferencia_ambiental == PreferenciaAmbiental.PREFERENCIA_ELETRICO and veiculo.tipo != TipoVeiculo.ELETRICO:
+                elif pedido.preferencia_ambiental == PreferenciaAmbiental.PREFERENCIA_ELETRICO and not isinstance(veiculo, VeiculoEletrico) :
                     penalizacao_pref = 100.0
 
                 # Aplicamos o fator de urgência ao custo operacional e de distância
                 # As penalizações fixas (bateria/preferencia) somam-se à parte
-                custo_opcao = (custo_base * fator_urgencia) + penalizacao_recarga + penalizacao_pref
+                custo_opcao = (custo_base * fator_urgencia) + penalizacao_pref
                 
                 if custo_opcao < min_custo_para_este_pedido:
                     min_custo_para_este_pedido = custo_opcao
