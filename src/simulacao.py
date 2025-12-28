@@ -278,13 +278,7 @@ class Simulador:
 
     def _heuristica_estado(self, estado):
         """
-        Heurística Multiobjetivo Completa:
-        1. Distância (Pickup + Viagem)
-        2. Custo financeiro (Custo/km)
-        3. Penalizações por recarga (Autonomia)
-        4. Preferências do cliente (Eco)
-        5. Capacidade (Filtro)
-        6. URGÊNCIA TEMPORAL (Evita que clientes esperem demasiado)
+        Heurística Multiobjetivo Completa.
         """
         custo_estimado_total = 0
         veiculos_disponiveis = estado.obter_veiculos_disponiveis()
@@ -292,20 +286,28 @@ class Simulador:
         # Se há pedidos mas não há carros, penalização máxima
         if not veiculos_disponiveis and estado.pedidos_pendentes:
             return len(estado.pedidos_pendentes) * 10000.0
-        # Data atual da simulação (do estado, não do sistema real)
+            
         agora = estado.timestamp
+
+        total_frota = len(estado.veiculos)
+        carros_centro = 0
+        
+        if total_frota > 0:
+            for v in estado.veiculos.values():
+                # Proteção com getattr caso o mapa não tenha zonas definidas
+                no = estado.grafo.nos.get(v.localizacao)
+                if no and getattr(no, 'zona', 'periferia') == 'centro':
+                    carros_centro += 1
+            
+            percent_centro = carros_centro / total_frota
+        else:
+            percent_centro = 0
 
         for pedido in estado.pedidos_pendentes:
             min_custo_para_este_pedido = float('inf')
             
-            # Quanto mais tempo passou, maior o multiplicador de custo
+            # Cálculo do Fator de Urgência
             tempo_espera_min = (agora - pedido.timestamp).total_seconds() / 60.0
-            
-            # Fator de crescimento exponencial suave:
-            # 0 min espera -> fator 1.0
-            # 15 min espera -> fator 1.5
-            # 30 min espera -> fator 2.0
-            # ...
             fator_urgencia = 1.0 + (tempo_espera_min / 30.0) 
                 
             for veiculo in veiculos_disponiveis:
@@ -321,19 +323,7 @@ class Simulador:
                 # 3. Custo Operacional Base
                 custo_base = dist_total * veiculo.custo_por_km
                 
-                """  # 4. Autonomia
-                penalizacao_recarga = 0
-                if veiculo.tipo == TipoVeiculo.ELETRICO:
-                    if veiculo.autonomia_atual < (dist_total * 1.1):
-                        estacao = estado.grafo.obter_estacao_recarga_mais_proxima(veiculo.localizacao)
-                        if estacao:
-                            dist_recarga = estado.grafo.distancia_euclidiana(veiculo.localizacao, estacao)
-                            if veiculo.type_str == "ELETRICO":
-                                penalizacao_recarga = (dist_recarga * veiculo.custo_por_km) + 50.0
-                            else:
-                                penalizacao_recarga = (dist_recarga * veiculo.custo_por_km) + 10.0
-                        else:
-                            penalizacao_recarga = 500.0 """
+                # 4. (Autonomia - comentado no original)
 
                 # 5. Preferências
                 penalizacao_pref = 0
@@ -342,9 +332,26 @@ class Simulador:
                 elif pedido.preferencia_ambiental == PreferenciaAmbiental.PREFERENCIA_ELETRICO and not isinstance(veiculo, VeiculoEletrico) :
                     penalizacao_pref = 100.0
 
-                # Aplicamos o fator de urgência ao custo operacional e de distância
-                # As penalizações fixas (bateria/preferencia) somam-se à parte
-                custo_opcao = (custo_base * fator_urgencia) + penalizacao_pref
+                # 6. Restrições de Zona (CORRIGIDO)
+                custo_zona = 0  # <--- Inicializar sempre a 0!
+
+                # Obter nós com segurança
+                no_origem = estado.grafo.nos.get(veiculo.localizacao)
+                no_destino = estado.grafo.nos.get(pedido.destino)
+                
+                if no_origem and no_destino:
+                    zona_origem = getattr(no_origem, 'zona', 'periferia')
+                    zona_destino = getattr(no_destino, 'zona', 'periferia')
+
+                    # Lógica: O carro está no centro E vai ser enviado para a periferia
+                    saiu_do_centro = (zona_origem == "centro" and zona_destino == "periferia")
+                    
+                    # Se sai do centro E temos menos de 50% da frota lá
+                    if saiu_do_centro and percent_centro < 0.5:
+                        custo_zona = 200.0
+
+                # Soma Final
+                custo_opcao = (custo_base * fator_urgencia) + penalizacao_pref + custo_zona
                 
                 if custo_opcao < min_custo_para_este_pedido:
                     min_custo_para_este_pedido = custo_opcao

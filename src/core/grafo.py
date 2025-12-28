@@ -31,13 +31,15 @@ class No:
         tipo: str,
         coords: Tuple[float, float],
         nome: Optional[str] = None,
-        capacidade_recarga: int = 0
+        capacidade_recarga: int = 0,
+        zona: str = "periferia"
     ):
         self.id = id
         self.tipo = tipo
         self.coords = coords
         self.nome = nome if nome else id
         self.capacidade_recarga = capacidade_recarga
+        self.zona = zona
         self.veiculos_em_recarga = 0
     
     def tem_recarga_disponivel(self) -> bool:
@@ -53,6 +55,9 @@ class No:
     def pode_abastecer_combustao(self) -> bool:
         """Verifica se o nó suporta abastecimento de combustão"""
         return self.tipo in [TipoNo.POSTO_ABASTECIMENTO, TipoNo.ZONA_MISTA]
+    
+    def eh_zona_centro(self) -> bool:
+        return self.zona == "centro"
     
     def __str__(self) -> str:
         return f"No({self.id}, {self.tipo}, {self.coords})"
@@ -119,7 +124,8 @@ class Grafo:
         tipo: str,
         coords: Tuple[float, float],
         nome: Optional[str] = None,
-        capacidade_recarga: int = 0
+        capacidade_recarga: int = 0,
+        zona: str = "periferia"
     ) -> No:
         """
         Adiciona um nó ao grafo
@@ -134,7 +140,7 @@ class Grafo:
         Returns:
             No: O nó criado
         """
-        no = No(id, tipo, coords, nome, capacidade_recarga)
+        no = No(id, tipo, coords, nome, capacidade_recarga, zona)
         self.nos[id] = no
         return no
     
@@ -465,7 +471,8 @@ class Grafo:
                 tipo=info['tipo'],
                 coords=tuple(info['coords']),
                 nome=info.get('nome'),
-                capacidade_recarga=info.get('capacidade_recarga', 0)
+                capacidade_recarga=info.get('capacidade_recarga', 0),
+                zona=info.get('zona', 'periferia')
             )
         
         # Adicionar arestas

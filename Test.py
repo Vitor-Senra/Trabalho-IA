@@ -4,6 +4,7 @@ import json
 import os
 from noise import pnoise2
 from random import randint
+import math
 
 # Função Perlin
 def perlin(x, y, scale=0.1, octaves=6):
@@ -42,6 +43,16 @@ def gerar_json_rede_viaria(localizacao="Porto, Portugal", ficheiro_saida="src/da
 
     # Reverter projeção para ter Latitude/Longitude corretas
     G_proj = ox.project_graph(G, to_crs="EPSG:4326")
+
+    # Determinar centro da área para referência
+    lons = [d['x'] for n, d in G_proj.nodes(data=True)]
+    lats = [d['y'] for n, d in G_proj.nodes(data=True)]
+    centro_lon = sum(lons) / len(lons)
+    centro_lat = sum(lats) / len(lats)
+
+    RAIO_CENTRO = 0.025 # ~2.5km
+
+
     # --- PROCESSAR NÓS ---
     percentagem_estacao_recarga = 1  # 1% estações de recarga
     percentagem_posto_abastecimento = 3  # 3% bombas de gasolina
@@ -58,11 +69,15 @@ def gerar_json_rede_viaria(localizacao="Porto, Portugal", ficheiro_saida="src/da
             tipo = "posto_abastecimento"
             capacidade_recarga = 8
 
+        dist_centro = math.sqrt((dados['x'] - centro_lon)**2 + (dados['y'] - centro_lat)**2)
+        zona_atual = "centro" if dist_centro <= RAIO_CENTRO else "periferia"
+
         dados_projeto["nos"][str(no_id)] = {
             "tipo": tipo,  # <--- Forçamos este tipo para todos
             "coords": [dados['x'], dados['y']], # longitude, latitude
             "nome": f"Cruzamento {no_id}",
-            "capacidade_recarga": capacidade_recarga # Apenas para estações de recarga
+            "capacidade_recarga": capacidade_recarga, # Apenas para estações de recarga
+            "zona": zona_atual
         }
 
 
@@ -93,7 +108,7 @@ def gerar_json_rede_viaria(localizacao="Porto, Portugal", ficheiro_saida="src/da
             "destino": str(v),
             "distancia": round(dist_km, 3),
             "tempo_base": round(tempo_min, 2),
-            "fator_transito": round(fator, 3)  # Variação entre 0.7x a 1.3x
+            "fator_transito": round(fator, 3)  # Variação entre 0.7x a 3x
         })
 
     # --- GUARDAR ---
