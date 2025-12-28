@@ -306,7 +306,7 @@ class Simulador:
         for pedido in estado.pedidos_pendentes:
             min_custo_para_este_pedido = float('inf')
             
-            # Cálculo do Fator de Urgência
+            # Quanto mais tempo passou, maior o multiplicador de custo
             tempo_espera_min = (agora - pedido.timestamp).total_seconds() / 60.0
             fator_urgencia = 1.0 + (tempo_espera_min / 30.0) 
                 
@@ -332,8 +332,8 @@ class Simulador:
                 elif pedido.preferencia_ambiental == PreferenciaAmbiental.PREFERENCIA_ELETRICO and not isinstance(veiculo, VeiculoEletrico) :
                     penalizacao_pref = 100.0
 
-                # 6. Restrições de Zona (CORRIGIDO)
-                custo_zona = 0  # <--- Inicializar sempre a 0!
+                # 6. Restrições de Zona
+                custo_zona = 0
 
                 # Obter nós com segurança
                 no_origem = estado.grafo.nos.get(veiculo.localizacao)
@@ -343,10 +343,8 @@ class Simulador:
                     zona_origem = getattr(no_origem, 'zona', 'periferia')
                     zona_destino = getattr(no_destino, 'zona', 'periferia')
 
-                    # Lógica: O carro está no centro E vai ser enviado para a periferia
                     saiu_do_centro = (zona_origem == "centro" and zona_destino == "periferia")
-                    
-                    # Se sai do centro E temos menos de 50% da frota lá
+
                     if saiu_do_centro and percent_centro < 0.5:
                         custo_zona = 200.0
 
