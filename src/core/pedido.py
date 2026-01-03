@@ -9,6 +9,7 @@ class PrioridadePedido(Enum):
     """Níveis de prioridade dos pedidos"""
     NORMAL = 1
     PREMIUM = 2
+    CRITICO = 3  # Pedido que excedeu 90% do tempo máximo
 
 
 class EstadoPedido(Enum):
@@ -43,6 +44,8 @@ class Pedido:
         preferencia_ambiental (PreferenciaAmbiental): Preferência por tipo de veículo
         tempo_espera_maximo (float): Tempo máximo de espera em minutos
         estado (EstadoPedido): Estado atual do pedido
+        escalado_para_critico (bool): Flag indicando se já foi escalado
+        avisos_tempo_limite (list): Lista de avisos registados
     """
     
     # Contador para gerar IDs únicos
@@ -57,7 +60,7 @@ class Pedido:
         horario_pretendido: Optional[datetime] = None,
         prioridade: PrioridadePedido = PrioridadePedido.NORMAL,
         preferencia_ambiental: PreferenciaAmbiental = PreferenciaAmbiental.INDIFERENTE,
-        tempo_espera_maximo: Optional[float] = float('inf'),
+        tempo_espera_maximo: Optional[float] = 30.0,  # Padrão: 30 minutos
         id: Optional[str] = None
     ):
         # Gerar ID único se não fornecido
@@ -76,6 +79,10 @@ class Pedido:
         self.preferencia_ambiental = preferencia_ambiental
         self.tempo_espera_maximo = tempo_espera_maximo
         self.estado = EstadoPedido.PENDENTE
+        
+        # Sistema de escalação de prioridade
+        self.escalado_para_critico = False  # Flag para evitar múltiplas escalações
+        self.avisos_tempo_limite = []  # Lista de avisos dados ao longo do tempo
         
         # Veículo atribuído (None se ainda não atribuído)
         self.veiculo_atribuido = None
@@ -118,6 +125,47 @@ class Pedido:
         tempo_decorrido = (datetime.now() - self.timestamp).total_seconds() / 60.0
         return tempo_decorrido > self.tempo_espera_maximo
     
+    def tempo_restante_minutos(self, tempo_atual: datetime) -> float:
+        """
+        Calcula o tempo restante até o pedido expirar
+        
+        Args:
+            tempo_atual: Tempo atual da simulação
+            
+        Returns:
+            float: Tempo restante em minutos (pode ser negativo se já expirou)
+        """
+        tempo_decorrido = (tempo_atual - self.timestamp).total_seconds() / 60.0
+        return self.tempo_espera_maximo - tempo_decorrido
+    
+    def verificar_e_escalar_prioridade(self, tempo_atual: datetime) -> str:
+        """
+        Verifica se o pedido deve ser escalado para prioridade crítica ou expirar.
+        
+        Args:
+            tempo_atual: Tempo atual da simulação
+            
+        Returns:
+            str: "OK", "ESCALADO_CRITICO" ou "EXPIRAR"
+        """
+        if self.estado != EstadoPedido.PENDENTE:
+            return "OK"
+        
+        tempo_decorrido = (tempo_atual - self.timestamp).total_seconds() / 60.0
+        percentagem_tempo = (tempo_decorrido / self.tempo_espera_maximo) * 100
+        
+        # 1. VERIFICAR EXPIRAÇÃO (100% do tempo)
+        if percentagem_tempo >= 100:
+            return "EXPIRAR"
+        
+        # 2. ESCALAR PARA CRÍTICO (70% do tempo)
+        if percentagem_tempo >= 70 and not self.escalado_para_critico:
+            self.prioridade = PrioridadePedido.CRITICO
+            self.escalado_para_critico = True
+            return "ESCALADO_CRITICO"
+        
+        return "OK"
+
     def atribuir_veiculo(self, veiculo):
         """
         Atribui um veículo ao pedido
@@ -194,13 +242,12 @@ class Pedido:
         satisfacao = 100.0
         
         # Penalizar por tempo de espera excessivo
-        if self.tempo_espera_real > self.tempo_espera_maximo * 0.5:
+        if self.tempo_espera_real and self.tempo_espera_real > self.tempo_espera_maximo * 0.5:
             penalizacao_tempo = min(30, (self.tempo_espera_real / self.tempo_espera_maximo) * 20)
             satisfacao -= penalizacao_tempo
         
         # Bonus por atender preferência ambiental
         if self.veiculo_atribuido:
-            
             if self.preferencia_ambiental == PreferenciaAmbiental.PREFERENCIA_ELETRICO:
                 if isinstance(self.veiculo_atribuido, VeiculoEletrico):
                     satisfacao += 10
@@ -210,7 +257,7 @@ class Pedido:
         
         # Ajustar por prioridade (clientes premium esperam mais)
         if self.prioridade == PrioridadePedido.PREMIUM:
-            if self.tempo_espera_real > 5:
+            if self.tempo_espera_real and self.tempo_espera_real > 5:
                 satisfacao -= 15
         
         # Limitar entre 0 e 100
@@ -281,7 +328,9 @@ class Pedido:
             'estado': self.estado.value,
             'tempo_espera_maximo': self.tempo_espera_maximo,
             'tempo_espera_real': round(self.tempo_espera_real, 2) if self.tempo_espera_real else None,
-            'tentativas_atribuicao': self.tentativas_atribuicao
+            'tentativas_atribuicao': self.tentativas_atribuicao,
+            'escalado': self.escalado_para_critico,
+            'num_avisos': len(self.avisos_tempo_limite)
         }
         
         if self.veiculo_atribuido:
@@ -289,12 +338,14 @@ class Pedido:
             stats['tipo_veiculo'] = self.veiculo_atribuido.tipo_str()
         
         if self.foi_concluido():
-            stats['distancia_km'] = round(self.distancia_percorrida, 2)
-            stats['custo_euros'] = round(self.custo_viagem, 2)
+            stats['distancia_km'] = round(self.distancia_percorrida, 2) if self.distancia_percorrida else 0
+            stats['custo_euros'] = round(self.custo_viagem, 2) if self.custo_viagem else 0
             stats['emissoes_co2_g'] = round(self.emissoes_co2, 2) if self.emissoes_co2 else 0
-            stats['tempo_total_min'] = round(self.calcular_tempo_total(), 2)
-            stats['tempo_viagem_min'] = round(self.calcular_tempo_viagem(), 2)
-            stats['satisfacao_cliente'] = round(self.satisfacao_cliente, 1)
+            tempo_total = self.calcular_tempo_total()
+            tempo_viagem = self.calcular_tempo_viagem()
+            stats['tempo_total_min'] = round(tempo_total, 2) if tempo_total else 0
+            stats['tempo_viagem_min'] = round(tempo_viagem, 2) if tempo_viagem else 0
+            stats['satisfacao_cliente'] = round(self.satisfacao_cliente, 1) if self.satisfacao_cliente else 0
         
         if self.motivos_rejeicao:
             stats['motivos_rejeicao'] = self.motivos_rejeicao
@@ -302,7 +353,7 @@ class Pedido:
         return stats
     
     def __str__(self) -> str:
-        return f"Pedido({self.id}, {self.origem}->{self.destino}, {self.num_passageiros}pax, {self.estado.value})"
+        return f"Pedido({self.id}, {self.origem}->{self.destino}, {self.num_passageiros}pax, {self.prioridade.name}, {self.estado.value})"
     
     def __repr__(self) -> str:
         return self.__str__()
