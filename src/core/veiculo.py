@@ -56,6 +56,10 @@ class Veiculo(ABC):
         self.proximo_no_index = 0
         self.progresso_aresta = 0.0
 
+        # Sistema de recarga/abastecimento
+        self.tempo_em_recarga = 0  # Minutos acumulados na estação
+        self.autonomia_ao_iniciar_recarga = 0  # Para calcular taxa de recarga
+
     @property
     @abstractmethod
     def emissao_co2_por_km(self) -> float:
@@ -226,9 +230,9 @@ class VeiculoEletrico(Veiculo):
         self.estado = EstadoVeiculo.EM_RECARGA
 
     def tempo_recarga_estimado(self, percentagem_alvo: float = 1.0) -> float:
-        """Elétricos demoram ~45 mins para carga total"""
+        """Elétricos demoram ~10 mins para carga total"""
         autonomia_necessaria = (percentagem_alvo * self.autonomia_max) - self.autonomia_atual
-        tempo_carga_completa = 45.0  # minutos
+        tempo_carga_completa = 10.0  # minutos (ajustado para visualização)
         return (autonomia_necessaria / self.autonomia_max) * tempo_carga_completa
 
 

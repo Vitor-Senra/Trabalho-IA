@@ -66,7 +66,16 @@ def main():
     print(f"Algoritmo inicial: {sim.algoritmo_ativo}")
     print("A iniciar simulação gráfica...")
     print()
-    
+
+    # ========== TESTE: FORÇAR BATERIA BAIXA ==========
+    print("\n[TESTE] Forçando bateria baixa nos veículos para teste de recarga...")
+    for v in sim.estado.veiculos.values():
+        v.autonomia_atual = 50  # 50km (menos de 30% de 300km)
+        tipo = "ELÉTRICO" if hasattr(v, 'taxa_recarga') else "COMBUSTÃO"
+        print(f"  {v.id} ({tipo}): {v.autonomia_atual:.0f}km ({v.autonomia_atual/v.autonomia_max*100:.0f}%)")
+    print("==================================================\n")
+    # ==================================================
+
     # --- CONTROLO DE TEMPO OTIMIZADO ---
     ultimo_passo_simulacao = time.time()
     INTERVALO_SIMULACAO = 1  # 1 segundo entre passos da simulação
