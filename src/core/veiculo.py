@@ -3,20 +3,18 @@ from typing import Optional, Dict, List
 from datetime import datetime
 from abc import ABC, abstractmethod
 
-# Removemos o Enum TipoVeiculo pois agora são classes
-# Mantemos o EstadoVeiculo pois é partilhado
 class EstadoVeiculo(Enum):
     DISPONIVEL = "disponivel"
     EM_SERVICO = "em_servico"
     A_CAMINHO = "a_caminho"
-    EM_RECARGA = "em_recarga"          # Usado para elétricos
-    EM_ABASTECIMENTO = "em_abastecimento" # Usado para combustão
+    EM_RECARGA = "em_recarga"
+    EM_ABASTECIMENTO = "em_abastecimento"
     MANUTENCAO = "manutencao"
     FORA_SERVICO = "fora_servico"
 
 class Veiculo(ABC):
     """
-    Classe base abstrata para todos os veículos da frota TaxiGreen.
+    Classe base abstrata para todos os veículos da frota taxiXLreen.
     """
     
     def __init__(
@@ -57,8 +55,8 @@ class Veiculo(ABC):
         self.progresso_aresta = 0.0
 
         # Sistema de recarga/abastecimento
-        self.tempo_em_recarga = 0  # Minutos acumulados na estação
-        self.autonomia_ao_iniciar_recarga = 0  # Para calcular taxa de recarga
+        self.tempo_em_recarga = 0
+        self.autonomia_ao_iniciar_recarga = 0
 
     @property
     @abstractmethod
@@ -69,7 +67,13 @@ class Veiculo(ABC):
     @property
     @abstractmethod
     def tipo_str(self) -> str:
-        """Retorna uma string representando o tipo ('eletrico' ou 'combustao')"""
+        """Retorna uma string representando o tipo"""
+        pass
+
+    @property
+    @abstractmethod
+    def categoria_veiculo(self) -> str:
+        """Retorna 'TAXI' ou 'taxiXL'"""
         pass
 
     def esta_disponivel(self) -> bool:
@@ -90,7 +94,6 @@ class Veiculo(ABC):
         percentagem_autonomia = self.autonomia_atual / self.autonomia_max
         return percentagem_autonomia < limiar
 
-    # Lógica de movimento comum a ambos
     def atualizar_posicao(self, grafo, passo_tempo_min: float = 1.0) -> bool:
         if not self.rota_atual:
             return False
@@ -115,7 +118,6 @@ class Veiculo(ABC):
             tempo_restante_na_aresta = (1.0 - self.progresso_aresta) * tempo_total_aresta
 
             if tempo_disponivel >= tempo_restante_na_aresta:
-                # Completa a aresta
                 fracao = tempo_restante_na_aresta / tempo_total_aresta
                 distancia_percorrida = fracao * distancia_aresta
                 self._registrar_movimento(distancia_percorrida)
@@ -131,7 +133,6 @@ class Veiculo(ABC):
                     chegou_ao_destino_final = True
                     break
             else:
-                # Move parcialmente na aresta
                 fracao = tempo_disponivel / tempo_total_aresta
                 distancia_percorrida = fracao * distancia_aresta
                 self._registrar_movimento(distancia_percorrida)
@@ -144,7 +145,6 @@ class Veiculo(ABC):
         return chegou_ao_destino_final
 
     def _registrar_movimento(self, distancia: float):
-        """Método auxiliar interno para atualizar estatísticas ao mover"""
         self.autonomia_atual -= distancia
         self.km_total_percorridos += distancia
         self.custo_total += distancia * self.custo_por_km
@@ -177,7 +177,6 @@ class Veiculo(ABC):
         self.autonomia_atual = self.autonomia_max * percentagem
         self.estado = EstadoVeiculo.DISPONIVEL
 
-    # Métodos Abstratos que as subclasses DEVEM implementar
     @abstractmethod
     def iniciar_recarga(self):
         pass
@@ -196,8 +195,10 @@ class Veiculo(ABC):
         return {
             'id': self.id,
             'tipo': self.tipo_str,
+            'categoria': self.categoria_veiculo,
             'estado': self.estado.value,
             'localizacao': self.localizacao,
+            'capacidade': self.capacidade,
             'autonomia_atual': round(self.autonomia_atual, 2),
             'autonomia_max': self.autonomia_max,
             'percentagem_autonomia': round((self.autonomia_atual / self.autonomia_max) * 100, 1),
@@ -207,16 +208,24 @@ class Veiculo(ABC):
         }
 
     def __str__(self) -> str:
-        return f"Veiculo({self.id}, {self.tipo_str}, {self.estado.value}, {self.localizacao})"
+        return f"Veiculo({self.id}, {self.categoria_veiculo}, {self.tipo_str}, Cap:{self.capacidade}, {self.estado.value})"
 
 
-# --- Subclasses Especializadas ---
+# ============================================================================
+# TaxiS (4 PASSAGEIROS) - Elétrico e Combustão
+# ============================================================================
 
-class VeiculoEletrico(Veiculo):
-    """Veículo movido a eletricidade (zero emissões, recarga lenta)"""
+class TaxiEletrico(Veiculo):
+    """Taxi elétrico - 4 passageiros, zero emissões"""
     
-    def __init__(self, id: str, autonomia_max: float, capacidade: int, custo_por_km: float, localizacao: str):
-        super().__init__(id, autonomia_max, capacidade, custo_por_km, localizacao)
+    def __init__(self, id: str, localizacao: str, autonomia_max: float = 250):
+        super().__init__(
+            id=id,
+            autonomia_max=autonomia_max,
+            capacidade=4,  # TAXI
+            custo_por_km=0.3,
+            localizacao=localizacao
+        )
 
     @property
     def emissao_co2_por_km(self) -> float:
@@ -226,35 +235,117 @@ class VeiculoEletrico(Veiculo):
     def tipo_str(self) -> str:
         return "eletrico"
 
+    @property
+    def categoria_veiculo(self) -> str:
+        return "TAXI"
+
     def iniciar_recarga(self):
         self.estado = EstadoVeiculo.EM_RECARGA
 
     def tempo_recarga_estimado(self, percentagem_alvo: float = 1.0) -> float:
-        """Elétricos demoram ~10 mins para carga total"""
         autonomia_necessaria = (percentagem_alvo * self.autonomia_max) - self.autonomia_atual
-        tempo_carga_completa = 10.0  # minutos (ajustado para visualização)
+        tempo_carga_completa = 10.0
         return (autonomia_necessaria / self.autonomia_max) * tempo_carga_completa
 
 
-class VeiculoCombustao(Veiculo):
-    """Veículo a combustão (emissões altas, reabastecimento rápido)"""
+class TaxiCombustao(Veiculo):
+    """Taxi a combustão - 4 passageiros, emissões médias"""
     
-    def __init__(self, id: str, autonomia_max: float, capacidade: int, custo_por_km: float, localizacao: str):
-        super().__init__(id, autonomia_max, capacidade, custo_por_km, localizacao)
+    def __init__(self, id: str, localizacao: str, autonomia_max: float = 400):
+        super().__init__(
+            id=id,
+            autonomia_max=autonomia_max,
+            capacidade=4,  # TAXI
+            custo_por_km=0.5,
+            localizacao=localizacao
+        )
 
     @property
     def emissao_co2_por_km(self) -> float:
-        return 120.0  # g/km
+        return 120.0
 
     @property
     def tipo_str(self) -> str:
         return "combustao"
 
+    @property
+    def categoria_veiculo(self) -> str:
+        return "TAXI"
+
     def iniciar_recarga(self):
         self.estado = EstadoVeiculo.EM_ABASTECIMENTO
 
     def tempo_recarga_estimado(self, percentagem_alvo: float = 1.0) -> float:
-        """Combustão demora ~5 mins para tanque cheio"""
         autonomia_necessaria = (percentagem_alvo * self.autonomia_max) - self.autonomia_atual
-        tempo_abastecimento_completo = 5.0 # minutos
+        tempo_abastecimento_completo = 5.0
+        return (autonomia_necessaria / self.autonomia_max) * tempo_abastecimento_completo
+
+
+# ============================================================================
+# TaxiXL (6 PASSAGEIROS) - Elétrico e Combustão
+# ============================================================================
+
+class taxiXLEletrica(Veiculo):
+    """TaxiXL elétrica - 6 passageiros, zero emissões, mais cara"""
+    
+    def __init__(self, id: str, localizacao: str, autonomia_max: float = 200):
+        super().__init__(
+            id=id,
+            autonomia_max=autonomia_max,
+            capacidade=6,  
+            custo_por_km=0.4,
+            localizacao=localizacao
+        )
+
+    @property
+    def emissao_co2_por_km(self) -> float:
+        return 0.0
+
+    @property
+    def tipo_str(self) -> str:
+        return "eletrico"
+
+    @property
+    def categoria_veiculo(self) -> str:
+        return "TaxiXL"
+
+    def iniciar_recarga(self):
+        self.estado = EstadoVeiculo.EM_RECARGA
+
+    def tempo_recarga_estimado(self, percentagem_alvo: float = 1.0) -> float:
+        autonomia_necessaria = (percentagem_alvo * self.autonomia_max) - self.autonomia_atual
+        tempo_carga_completa = 15.0  # taxiXLs demoram mais a carregar
+        return (autonomia_necessaria / self.autonomia_max) * tempo_carga_completa
+
+
+class taxiXLCombustao(Veiculo):
+    """TaxiXL a combustão - 6 passageiros, emissões altas"""
+    
+    def __init__(self, id: str, localizacao: str, autonomia_max: float = 350):
+        super().__init__(
+            id=id,
+            autonomia_max=autonomia_max,
+            capacidade=6,  
+            custo_por_km=0.7,  
+            localizacao=localizacao
+        )
+
+    @property
+    def emissao_co2_por_km(self) -> float:
+        return 180.0 
+
+    @property
+    def tipo_str(self) -> str:
+        return "combustao"
+
+    @property
+    def categoria_veiculo(self) -> str:
+        return "TaxiXL"
+
+    def iniciar_recarga(self):
+        self.estado = EstadoVeiculo.EM_ABASTECIMENTO
+
+    def tempo_recarga_estimado(self, percentagem_alvo: float = 1.0) -> float:
+        autonomia_necessaria = (percentagem_alvo * self.autonomia_max) - self.autonomia_atual
+        tempo_abastecimento_completo = 7.0 
         return (autonomia_necessaria / self.autonomia_max) * tempo_abastecimento_completo
