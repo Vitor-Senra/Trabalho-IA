@@ -508,7 +508,17 @@ class Gui:
         self.ui_rects['btn_sel_destino'] = pygame.Rect(cx + 280, cy + 150, 90, 35)
         self._desenhar_input(self.ui_rects['input_destino'], self.input_pedido_destino, self.campo_focado == 'pedido_destino')
         self.desenhar_botao(self.ui_rects['btn_sel_destino'], "Mapa", COR_BTN_SELECIONAR, pequena_fonte=True)
-        
+
+        # Número de Passageiros
+        self.screen.blit(self.font_texto.render("Passageiros:", True, COR_TEXTO), (cx + 50, cy + 200))
+        self.ui_rects['btn_menos_pax'] = pygame.Rect(cx + 50, cy + 220, 60, 35)
+        self.ui_rects['input_passageiros'] = pygame.Rect(cx + 120, cy + 220, 100, 35)
+        self.ui_rects['btn_mais_pax'] = pygame.Rect(cx + 230, cy + 220, 60, 35)
+
+        self.desenhar_botao(self.ui_rects['btn_menos_pax'], "-", (80, 80, 100), pequena_fonte=True)
+        self._desenhar_input(self.ui_rects['input_passageiros'], self.input_pedido_passageiros, self.campo_focado == 'pedido_passageiros')
+        self.desenhar_botao(self.ui_rects['btn_mais_pax'], "+", (80, 80, 100), pequena_fonte=True)
+
         # Checkbox Premium
         self.ui_rects['checkbox_premium'] = pygame.Rect(cx + 50, cy + 275, 20, 20)
         cor_check = (255, 215, 0) if self.input_pedido_premium else (100, 100, 100)

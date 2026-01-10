@@ -1,3 +1,4 @@
+
 import sys
 import os
 import time
@@ -53,11 +54,35 @@ def get_dados_visuais(sim):
         'pedidos': dados_pedidos
     }
 
+def inicializar_frota_bateria_baixa(sim, percentagem_bateria=0.20):
+    """
+    Configura todos os veículos da frota para começarem com bateria baixa.
+    
+    Args:
+        sim: Instância do Simulador
+        percentagem_bateria: Percentagem da bateria inicial (0.0 a 1.0)
+    """
+    print("\n🔋 Configurando bateria baixa inicial...")
+    
+    for veiculo_id, veiculo in sim.estado.veiculos.items():
+        bateria_inicial = veiculo.autonomia_max * percentagem_bateria
+        veiculo.autonomia_atual = bateria_inicial
+        
+        tipo_energia = "Elétrico" if veiculo.tipo_str == "eletrico" else "Combustão"
+        print(f"   {veiculo_id} ({tipo_energia}): {bateria_inicial:.0f}km / {veiculo.autonomia_max:.0f}km ({percentagem_bateria*100:.0f}%)")
+    
+    print("✅ Todos os veículos configurados com bateria baixa!\n")
+
 def main():
     caminho_dados = "src/data/cidade.json"
     
-    # 1. Inicializar
+    # 1. Inicializar Simulador
     sim = Simulador(caminho_dados)
+    
+    # 2. CONFIGURAR BATERIA BAIXA (20% por padrão)
+    inicializar_frota_bateria_baixa(sim, percentagem_bateria=0.20)
+    
+    # 3. Inicializar GUI
     gui = Gui(caminho_dados)
     
     print("=" * 60)
@@ -66,16 +91,7 @@ def main():
     print(f"Algoritmo inicial: {sim.algoritmo_ativo}")
     print("A iniciar simulação gráfica...")
     print()
-
-    # ========== TESTE: FORÇAR BATERIA BAIXA ==========
-    print("\n[TESTE] Forçando bateria baixa nos veículos para teste de recarga...")
-    for v in sim.estado.veiculos.values():
-        v.autonomia_atual = 50  # 50km (menos de 30% de 300km)
-        tipo = "ELÉTRICO" if hasattr(v, 'taxa_recarga') else "COMBUSTÃO"
-        print(f"  {v.id} ({tipo}): {v.autonomia_atual:.0f}km ({v.autonomia_atual/v.autonomia_max*100:.0f}%)")
-    print("==================================================\n")
-    # ==================================================
-
+    
     # --- CONTROLO DE TEMPO OTIMIZADO ---
     ultimo_passo_simulacao = time.time()
     INTERVALO_SIMULACAO = 1  # 1 segundo entre passos da simulação
@@ -106,7 +122,7 @@ def main():
                 try:
                     sim.criar_veiculo_manual(t, n)
                     dados = get_dados_visuais(sim)  # Atualiza visual imediatamente
-                    print(f" Veículo {t} criado no nó {n}")
+                    print(f"✅ Veículo {t} criado no nó {n}")
                 except AttributeError:
                     print("ERRO: O método 'criar_veiculo_manual' não existe no Simulador.")
                 except Exception as e:
@@ -121,7 +137,7 @@ def main():
                     sim.criar_pedido_manual(orig, dest, premium=premium)
                     dados = get_dados_visuais(sim)
                     tipo = "PREMIUM" if premium else "NORMAL"
-                    print(f"Pedido {tipo} criado: {orig} → {dest}")
+                    print(f"✅ Pedido {tipo} criado: {orig} → {dest}")
                 except AttributeError:
                     print("ERRO: O método 'criar_pedido_manual' não existe no Simulador.")
                 except Exception as e:
@@ -135,19 +151,19 @@ def main():
                         continue
                     sim.gerar_carro_aleatorio()
                     dados = get_dados_visuais(sim)
-                    print("Veículo aleatório adicionado")
+                    print("✅ Veículo aleatório adicionado")
                     
             elif acao == "add_pedido":
                 if parametros == "random":
                     sim.gerar_pedido_aleatorio()
                     dados = get_dados_visuais(sim)
-                    print("Pedido aleatório adicionado")
+                    print("✅ Pedido aleatório adicionado")
             
             # --- 4. MUDAR ALGORITMO ---
             elif acao == "mudar_algoritmo":
                 sim.definir_algoritmo(parametros)
                 dados = get_dados_visuais(sim)
-                print(f"Algoritmo alterado para: {parametros}")
+                print(f"🔄 Algoritmo alterado para: {parametros}")
 
 if __name__ == "__main__":
     main()

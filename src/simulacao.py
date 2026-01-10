@@ -7,7 +7,7 @@ from src.core.veiculo import (
     TaxiEletrico, TaxiCombustao,
     taxiXLEletrica, taxiXLCombustao,
 )
-from src.core.pedido import Pedido, PrioridadePedido, PreferenciaAmbiental
+from src.core.pedido import Pedido, PrioridadePedido, PreferenciaAmbiental, EstadoPedido
 from src.core.estado import Estado
 
 
@@ -16,7 +16,6 @@ class Simulador:
         print("-> A carregar mapa...")
         self.grafo = Grafo.carregar_json(caminho_dados)
         
-
         # Criar frota inicial diversificada
         nos_mapa = list(self.grafo.nos.keys())
         frota_temp = {}
@@ -46,7 +45,7 @@ class Simulador:
             'pedidos_concluidos': 0,
             'taxis_criados': 4,
             'taxixl_criadas': 2,
-            'eventos_transito_total': 0  # NOVO
+            'eventos_transito_total': 0
         }
         
         # Sistema de Algoritmos
@@ -252,7 +251,8 @@ class Simulador:
         
         print(f"✅ Pedido Manual {tipo} criado: {origem} -> {destino} ({pax_info}, {tempo_max}min)")
 
-    def recarregar_veiculo(self, veiculo_id: str) -> bool:
+    # ✅ FIX 1: MOVER PARA DENTRO DA CLASSE
+    def recarregar_veiculo(self, veiculo_id: str, forcado: bool = False) -> bool:
         """
         Envia um veículo para a estação de recarga/abastecimento mais próxima.
         """
@@ -262,11 +262,12 @@ class Simulador:
 
         veiculo = self.estado.veiculos[veiculo_id]
 
-        if veiculo.estado != EstadoVeiculo.DISPONIVEL:
+        # Se não for forçado, verificar se está disponível
+        if not forcado and veiculo.estado != EstadoVeiculo.DISPONIVEL:
             print(f"❌ [ERRO] Veículo {veiculo_id} não está disponível (Estado: {veiculo.estado.value})")
             return False
 
-        # Identificar tipo de estação (verifica se é elétrico)
+        # Identificar tipo de estação
         if veiculo.tipo_str == "eletrico":
             tipo_estacao = "estacao_recarga"
             nome_estacao = "RECARGA"
@@ -305,10 +306,11 @@ class Simulador:
         veiculo.definir_rota(resultado.caminho)
         veiculo.destino_atual = no_estacao_id
 
-        if veiculo.tipo_str == "eletrico":
-            veiculo.estado = EstadoVeiculo.EM_RECARGA
-        else:
-            veiculo.estado = EstadoVeiculo.EM_ABASTECIMENTO
+        # ✅ FIX PRINCIPAL: Marcar como missão de recarga
+        veiculo.em_missao_recarga = True
+        
+        # ✅ FIX: Estado fica A_CAMINHO (não EM_RECARGA ainda)
+        veiculo.estado = EstadoVeiculo.A_CAMINHO
 
         print(f"🔋 [{nome_estacao}] {veiculo_id} ({veiculo.categoria_veiculo}) enviado para {no_estacao_id} ({veiculo.autonomia_atual:.0f}km restantes)")
         return True
@@ -337,6 +339,27 @@ class Simulador:
     def _consumir_autonomia(self, veiculo, distancia):
         consumo = distancia * veiculo.consumo_por_km
         veiculo.autonomia_atual = max(0, veiculo.autonomia_atual - consumo)
+
+    def _obter_distancia_estacao_mais_proxima(self, veiculo, localizacao_destino):
+        """
+        Calcula a distância até à estação de recarga mais próxima a partir de um destino.
+        """
+        tipo_estacao = "estacao_recarga" if veiculo.tipo_str == "eletrico" else "posto_abastecimento"
+
+        estacoes = [
+            (no_id, no) for no_id, no in self.grafo.nos.items()
+            if no.tipo == tipo_estacao
+        ]
+
+        if not estacoes:
+            return 50.0  # Fallback: assumir 50km se não houver estações
+
+        estacao_mais_proxima = min(
+            estacoes,
+            key=lambda e: self.grafo.distancia_euclidiana(localizacao_destino, e[0])
+        )
+
+        return self.grafo.distancia_euclidiana(localizacao_destino, estacao_mais_proxima[0])
 
     def atualizar_movimento_veiculos(self):
         algoritmo = self._obter_funcao_algoritmo()
@@ -371,15 +394,31 @@ class Simulador:
             chegou = veiculo.atualizar_posicao(self.grafo, 0.4)
 
             if chegou:
-                # Chegou a estação
-                if veiculo.destino_atual and veiculo.destino_atual == veiculo.localizacao:
-                    veiculo.autonomia_ao_iniciar_recarga = veiculo.autonomia_atual
-                    veiculo.estado = (
-                        EstadoVeiculo.EM_RECARGA
-                        if veiculo.tipo_str == "eletrico"
-                        else EstadoVeiculo.EM_ABASTECIMENTO
-                    )
-                    continue
+                no_atual = self.grafo.nos.get(veiculo.localizacao)
+
+                # ✅ FIX: SÓ TRATA ESTAÇÃO SE ESTIVER EM MISSÃO DE RECARGA
+                if getattr(veiculo, "em_missao_recarga", False):
+                    if no_atual and (
+                        (veiculo.tipo_str == "eletrico" and no_atual.tipo == "estacao_recarga") or
+                        (veiculo.tipo_str != "eletrico" and no_atual.tipo == "posto_abastecimento")
+                    ):
+                        veiculo.autonomia_ao_iniciar_recarga = veiculo.autonomia_atual
+                        veiculo.tempo_em_recarga = 0
+                        veiculo.estado = (
+                            EstadoVeiculo.EM_RECARGA if veiculo.tipo_str == "eletrico"
+                            else EstadoVeiculo.EM_ABASTECIMENTO
+                        )
+                        veiculo.em_missao_recarga = False
+                        tipo_estacao = "RECARGA" if veiculo.tipo_str == "eletrico" else "ABASTECIMENTO"
+                        print(f"🔌 {veiculo.id} chegou à estação de {tipo_estacao} - iniciando ({veiculo.autonomia_atual:.0f}km)")
+                        continue
+                    else:
+                        # Chegou ao sítio errado durante missão de recarga
+                        print(f"⚠️ ERRO: {veiculo.id} estava em missão de recarga mas chegou a {getattr(no_atual, 'tipo', 'desconhecido')}")
+                        veiculo.em_missao_recarga = False
+                        veiculo.estado = EstadoVeiculo.DISPONIVEL
+                        veiculo.destino_atual = None
+                        continue
 
                 # Chegou ao pickup
                 if veiculo.estado == EstadoVeiculo.A_CAMINHO:
@@ -414,17 +453,55 @@ class Simulador:
         self.atualizar_movimento_veiculos()
         self.verificar_e_recarregar_veiculos()
 
-    def verificar_e_recarregar_veiculos(self, limiar=0.3):
+    def verificar_e_recarregar_veiculos(self, limiar=0.3, limiar_critico=0.15):
+        """
+        Verifica bateria dos veículos e envia para recarga quando necessário.
+        """
         for v in self.estado.veiculos.values():
+            percentagem_bateria = v.autonomia_atual / v.autonomia_max
+
+            # CASO 1: Veículo disponível com bateria baixa
             if (
                 v.estado == EstadoVeiculo.DISPONIVEL and
-                v.autonomia_atual / v.autonomia_max < limiar
+                percentagem_bateria < limiar
             ):
                 self.recarregar_veiculo(v.id)
+
+            # CASO 2: Veículo em serviço com bateria CRÍTICA - abortar viagem
+            elif (
+                v.estado in (EstadoVeiculo.A_CAMINHO, EstadoVeiculo.EM_SERVICO) and
+                percentagem_bateria < limiar_critico
+            ):
+                print(f"⚠️  {v.id} com bateria crítica ({percentagem_bateria*100:.1f}%) - abortando viagem!")
+
+                # Cancelar pedido atual se existir
+                if v.pedido_atual:
+                    # Devolver pedido para pendentes
+                    if v.pedido_atual in self.estado.pedidos_ativos:
+                        self.estado.pedidos_ativos.remove(v.pedido_atual)
+                        v.pedido_atual.estado = EstadoPedido.PENDENTE
+                        v.pedido_atual.veiculo_atribuido = None
+                        self.estado.pedidos_pendentes.append(v.pedido_atual)
+                        print(f"   Pedido {v.pedido_atual.id} devolvido à fila")
+
+                    v.pedido_atual = None
+
+                # Limpar rota e passageiros
+                v.rota_atual = []
+                v.proximo_no_index = 0
+                v.progresso_aresta = 0.0
+                v.passageiros_atuais = 0
+                v.destino_atual = None
+
+                # Marcar como disponível para poder ir recarregar
+                v.estado = EstadoVeiculo.DISPONIVEL
+
+                # Enviar para recarga imediatamente
+                self.recarregar_veiculo(v.id)
+                
     def processar_atribuicoes_inteligente(self):
         """
         Planeamento de Frota usando A* no Espaço de Estados.
-        NOTA: Este A* é para PLANEAMENTO, não para navegação no mapa.
         """
         if not self.estado.pedidos_pendentes or not self.estado.obter_veiculos_disponiveis():
             return
@@ -475,9 +552,14 @@ class Simulador:
             pedido_clone = melhor_acao['pedido']
             veiculo_clone = melhor_acao['veiculo']
             
+            # ✅ FIX 2: DEFINIR pedido_real e veiculo_real ANTES de usar
             pedido_real = next(p for p in self.estado.pedidos_pendentes if p.id == pedido_clone.id)
             veiculo_real = self.estado.veiculos[veiculo_clone.id]
             
+            # ✅ Agora sim pode usar
+            veiculo_real.em_missao_recarga = False
+            veiculo_real.destino_atual = pedido_real.origem
+
             print(f"[INTELIGENTE] Decisão: Atribuir {veiculo_real.id} ({veiculo_real.categoria_veiculo}) ao pedido {pedido_real.id} ({pedido_real.num_passageiros}pax, {pedido_real.prioridade.name})")
             
             self.estado.atribuir_pedido(pedido_real, veiculo_real)
@@ -536,11 +618,20 @@ class Simulador:
             for veiculo in veiculos_disponiveis:
                 # CRUCIAL: Verificar capacidade
                 if veiculo.capacidade < pedido.num_passageiros:
-                    continue 
-                
+                    continue
+
                 dist_pickup = estado.grafo.distancia_euclidiana(veiculo.localizacao, pedido.origem)
                 dist_viagem = estado.grafo.distancia_euclidiana(pedido.origem, pedido.destino)
                 dist_total = dist_pickup + dist_viagem
+
+                # Validação de autonomia
+                dist_estacao = self._obter_distancia_estacao_mais_proxima(veiculo, pedido.destino)
+                dist_total_com_margem = dist_total + dist_estacao
+
+                autonomia_necessaria = dist_total_com_margem * 1.2
+                if veiculo.autonomia_atual < autonomia_necessaria:
+                    continue
+
                 custo_base = dist_total * veiculo.custo_por_km
 
                 penalizacao_pref = 0
