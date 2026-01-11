@@ -338,7 +338,7 @@ class Gui:
                             num = max(1, int(self.input_pedido_passageiros or 1) - 1)
                             self.input_pedido_passageiros = str(num)
                         elif self.ui_rects.get('btn_mais_pax', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
-                            num = min(7, int(self.input_pedido_passageiros or 1) + 1)
+                            num = min(6, int(self.input_pedido_passageiros or 1) + 1)
                             self.input_pedido_passageiros = str(num)
                         
                         elif self.ui_rects.get('btn_confirmar_pedido', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
@@ -482,15 +482,60 @@ class Gui:
         self.desenhar_botao(self.ui_rects['btn_confirmar_carro'], "CRIAR", COR_BTN_ACAO)
         self.desenhar_botao(self.ui_rects['btn_cancelar'], "CANCELAR", (100, 100, 100))
 
-    # Checkbox Premium
-        self.ui_rects['checkbox_premium'] = pygame.Rect(cx + 50, cy + 275, 20, 20)
+    def desenhar_form_pedido(self):
+        self._desenhar_fundo_modal()
+        w, h = 520, 480
+        cx, cy = LARGURA_TOTAL//2 - w//2, ALTURA//2 - h//2
+        rect_janela = pygame.Rect(cx, cy, w, h)
+        self._desenhar_janela(rect_janela)
+        self.screen.blit(self.font_titulo.render("NOVO PEDIDO", True, COR_TEXTO), (cx + 40, cy + 20))
+        
+        # Origem
+        self.screen.blit(self.font_texto.render("Nó de Origem:", True, COR_TEXTO), (cx + 50, cy + 70))
+        self.ui_rects['input_origem'] = pygame.Rect(cx + 50, cy + 90, 220, 35)
+        self.ui_rects['btn_sel_origem'] = pygame.Rect(cx + 280, cy + 90, 90, 35)
+        self._desenhar_input(self.ui_rects['input_origem'], self.input_pedido_origem, self.campo_focado == 'pedido_origem')
+        self.desenhar_botao(self.ui_rects['btn_sel_origem'], "Mapa", COR_BTN_SELECIONAR, pequena_fonte=True)
+        
+        # Destino
+        self.screen.blit(self.font_texto.render("Nó de Destino:", True, COR_TEXTO), (cx + 50, cy + 140))
+        self.ui_rects['input_destino'] = pygame.Rect(cx + 50, cy + 160, 220, 35)
+        self.ui_rects['btn_sel_destino'] = pygame.Rect(cx + 280, cy + 160, 90, 35)
+        self._desenhar_input(self.ui_rects['input_destino'], self.input_pedido_destino, self.campo_focado == 'pedido_destino')
+        self.desenhar_botao(self.ui_rects['btn_sel_destino'], "Mapa", COR_BTN_SELECIONAR, pequena_fonte=True)
+        
+        # Número de Passageiros
+        self.screen.blit(self.font_texto.render("Passageiros:", True, COR_TEXTO), (cx + 50, cy + 210))
+        
+        self.ui_rects['btn_menos_pax'] = pygame.Rect(cx + 50, cy + 235, 40, 35)
+        self.ui_rects['input_passageiros'] = pygame.Rect(cx + 100, cy + 235, 60, 35)
+        self.ui_rects['btn_mais_pax'] = pygame.Rect(cx + 170, cy + 235, 40, 35)
+        
+        self.desenhar_botao(self.ui_rects['btn_menos_pax'], "-", (100, 100, 100), pequena_fonte=True)
+        self._desenhar_input(self.ui_rects['input_passageiros'], self.input_pedido_passageiros, self.campo_focado == 'pedido_passageiros')
+        self.desenhar_botao(self.ui_rects['btn_mais_pax'], "+", (100, 100, 100), pequena_fonte=True)
+        
+        # Info sobre TaxiXL
+        num_pax = int(self.input_pedido_passageiros or 1)
+        if num_pax > 4:
+            info_text = "Requer TaxiXL (5-6 passageiros)"
+            self.screen.blit(self.font_pequena.render(info_text, True, COR_PEDIDO_TAXIXL), (cx + 50, cy + 280))
+        
+        # Checkbox Premium
+        self.ui_rects['checkbox_premium'] = pygame.Rect(cx + 50, cy + 315, 20, 20)
         cor_check = (255, 215, 0) if self.input_pedido_premium else (100, 100, 100)
         pygame.draw.rect(self.screen, cor_check, self.ui_rects['checkbox_premium'], border_radius=3)
         if self.input_pedido_premium:
-            pygame.draw.line(self.screen, (0,0,0), (cx+52, cy+285), (cx+60, cy+292), 2)
-            pygame.draw.line(self.screen, (0,0,0), (cx+60, cy+292), (cx+68, cy+278), 2)
-        self.screen.blit(self.font_texto.render("Cliente Premium (30min)", True, COR_TEXTO), (cx + 80, cy + 275))
+            pygame.draw.line(self.screen, (0,0,0), (cx+52, cy+325), (cx+60, cy+332), 2)
+            pygame.draw.line(self.screen, (0,0,0), (cx+60, cy+332), (cx+68, cy+318), 2)
+        self.screen.blit(self.font_texto.render("Cliente Premium (30min)", True, COR_TEXTO), (cx + 80, cy + 315))
         
+        # Botões de ação
+        self.ui_rects['btn_confirmar_pedido'] = pygame.Rect(cx + 50, cy + 380, 160, 50)
+        self.ui_rects['btn_cancelar'] = pygame.Rect(cx + 220, cy + 380, 160, 50)
+        self.desenhar_botao(self.ui_rects['btn_confirmar_pedido'], "CRIAR", COR_BTN_ACAO)
+        self.desenhar_botao(self.ui_rects['btn_cancelar'], "CANCELAR", (100, 100, 100))
+
         # Botões de ação
         self.ui_rects['btn_confirmar_pedido'] = pygame.Rect(cx + 50, cy + 380, 160, 50)
         self.ui_rects['btn_cancelar'] = pygame.Rect(cx + 220, cy + 380, 160, 50)
