@@ -219,7 +219,7 @@ class Simulador:
         self.estado.veiculos[vid] = novo_veiculo
         print(f"[CRIADO] {tipo_nome} em {no_inicial} (ID: {vid}, {novo_veiculo.capacidade} lugares)")
 
-    def criar_pedido_manual(self, origem, destino, num_passageiros=1, premium=False):
+    def criar_pedido_manual(self, origem, destino, num_passageiros=1, pref_ambiental="indiferente", premium=False):
         """Cria um pedido específico para testes controlados."""
         if origem not in self.grafo.nos:
             print(f"[ERRO] A origem '{origem}' não existe no mapa.")
@@ -228,6 +228,11 @@ class Simulador:
         if destino not in self.grafo.nos:
             print(f"[ERRO] O destino '{destino}' não existe no mapa.")
             return
+        
+        try:
+            pref_enum = PreferenciaAmbiental(pref_ambiental)
+        except ValueError:
+            pref_enum = PreferenciaAmbiental.INDIFERENTE
 
         if premium:
             prioridade = PrioridadePedido.PREMIUM
@@ -237,10 +242,17 @@ class Simulador:
             prioridade = PrioridadePedido.NORMAL
             tempo_max = 60.0
             tipo = "NORMAL"
+        
 
-        novo_pedido = Pedido(origem, destino, num_passageiros,
-                            prioridade=prioridade,
-                            tempo_espera_maximo=tempo_max)
+        novo_pedido = Pedido(
+            origem, 
+            destino, 
+            num_passageiros,
+            timestamp=self.tempo_atual,
+            prioridade=prioridade,
+            tempo_espera_maximo=tempo_max,
+            preferencia_ambiental=pref_enum # Define a preferência no objeto
+        )
 
         self.estado.adicionar_pedido(novo_pedido)
         
@@ -653,3 +665,35 @@ class Simulador:
             custo_estimado_total += min_custo_para_este_pedido
 
         return custo_estimado_total
+
+    
+    # Adiciona este método à classe Simulador em src/simulacao.py
+    def alterar_transito_aleatorio(self):
+        # 1. Alterar o trânsito em arestas aleatórias
+        for origem in self.grafo.arestas:
+            for destino in self.grafo.arestas[origem]:
+                # Atribui um fator entre 1.0 (normal) e 3.0 (caos)
+                novo_fator = (random.uniform(1,100)- 60) /100
+                aresta = self.grafo.arestas[origem][destino]
+                valor_antigo = aresta.fator_transito
+                valor_novo = min(3.0, max(0.5, valor_antigo + novo_fator))
+                self.grafo.atualizar_transito(origem, destino, valor_novo)
+        
+        # 2. Forçar recálculo: Limpar as rotas dos veículos em movimento
+        for v in self.estado.veiculos.values():
+            if v.estado in (EstadoVeiculo.A_CAMINHO, EstadoVeiculo.EM_SERVICO):
+                # Ao limpar a rota, o método atualizar_movimento_veiculos 
+                # chamará o algoritmo de procura novamente
+                algoritmo = self._obter_funcao_algoritmo()
+                print (algoritmo)
+                rota_pickup = algoritmo(
+                self.grafo, 
+                v.localizacao, 
+                v.destino_atual, 
+                metrica='tempo'
+                )
+                
+                if rota_pickup.sucesso:
+                    v.definir_rota(rota_pickup.caminho)
+                    
+                    print(f"[TRÂNSITO] Rota de {v.id} será recalculada.")

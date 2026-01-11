@@ -375,13 +375,17 @@ class Estado:
                 
                 # Verificar se veículo pode atender (autonomia e capacidade)
                 if veiculo.pode_atender_pedido(pedido.num_passageiros, dist_total):
-                    # Verificar preferências do cliente (ex: quer elétrico?)
+                    penalizacao = 0
+                    if pedido.preferencia_ambiental == pedido.preferencia_ambiental.APENAS_ELETRICO and veiculo.tipo_str != "eletrico":
+                        penalizacao = float('inf') # Ignora completamente esta opção
+                    elif pedido.preferencia_ambiental == pedido.preferencia_ambiental.PREFERENCIA_ELETRICO and veiculo.tipo_str != "eletrico":
+                        penalizacao = 500 # Adiciona um custo virtual elevado
                     if pedido.aceita_veiculo(veiculo):
                         acoes.append({
                             'tipo': 'atribuir',
                             'pedido': pedido,
                             'veiculo': veiculo,
-                            'distancia_estimada': dist_total
+                            'distancia_estimada': dist_total + penalizacao
                         })
         
         return acoes

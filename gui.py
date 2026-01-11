@@ -52,7 +52,7 @@ COR_BTN_SELECIONAR = (100, 100, 150)
 COR_BTN_ALGORITMO = (120, 0, 200)
 
 class Gui:
-    def __init__(self, caminho_json):
+    def __init__(self, grafo_instancia):
         pygame.init()
         pygame.display.set_caption("TaxiGreen - Sistema Multi-Capacidade")
         self.screen = pygame.display.set_mode((LARGURA_TOTAL, ALTURA))
@@ -62,7 +62,7 @@ class Gui:
         self.font_pequena = pygame.font.SysFont("Consolas", 10)
         self.clock = pygame.time.Clock()
         
-        self.grafo = Grafo.carregar_json(caminho_json)
+        self.grafo = grafo_instancia
         self.calcular_escala()
         self.running = True
 
@@ -72,6 +72,7 @@ class Gui:
         self.input_pedido_destino = ""
         self.input_pedido_passageiros = "1"
         self.campo_focado = None
+        self.input_pedido_pref_ambiental = "indiferente"
         
         self.input_tipo_carro = "taxi_eletrico"
         self.input_pedido_premium = False
@@ -102,28 +103,35 @@ class Gui:
         self.cache_mapa_surface = None
         self.ultimo_estado_transito = None
         
-        # Definição de botões
+        # --- DEFINIÇÃO DE POSIÇÕES (UI) ---
         x_base = LARGURA_MAPA + 20
+        largura_util = LARGURA_BARRA - 40
+        espacamento = 10
+        largura_meio = (largura_util - espacamento) // 2
+
+        # Filtros organizados em pares para poupar espaço vertical
         self.botoes_filtro = {
-            'veiculos': pygame.Rect(x_base, 60, 140, 30),
-            'pedidos': pygame.Rect(x_base + 150, 60, 140, 30),
-            'rotas': pygame.Rect(x_base, 100, 140, 30),
-            'tempo': pygame.Rect(x_base + 150, 100, 140, 30),
-            'transito': pygame.Rect(x_base, 140, 290, 30)
+            'veiculos': pygame.Rect(x_base, 60, largura_meio, 30),
+            'pedidos':  pygame.Rect(x_base + largura_meio + espacamento, 60, largura_meio, 30),
+            'rotas':    pygame.Rect(x_base, 100, largura_meio, 30),
+            'tempo':    pygame.Rect(x_base + largura_meio + espacamento, 100, largura_meio, 30),
+            'transito': pygame.Rect(x_base, 140, largura_util, 30)
         }
         
-        self.btn_algoritmo = pygame.Rect(x_base, 180, 290, 35)
+        self.btn_algoritmo = pygame.Rect(x_base, 180, largura_util, 35)
+        self.btn_alterar_transito = pygame.Rect(x_base, 220, largura_util, 35)
 
-        y_acao = ALTURA - 80
-        self.btn_novo_carro = pygame.Rect(x_base, y_acao, 140, 50)
-        self.btn_novo_pedido = pygame.Rect(x_base + 150, y_acao, 140, 50)
+        # Botões de Ação (+ CARRO e + PEDIDO) lado a lado no fundo
+        y_acao = ALTURA - 70
+        self.btn_novo_carro = pygame.Rect(x_base, y_acao, largura_meio, 50)
+        self.btn_novo_pedido = pygame.Rect(x_base + largura_meio + espacamento, y_acao, largura_meio, 50)
 
         self.popup_ativo = None
         self.rect_popup_random = None
         self.rect_popup_custom = None
         
         self.ui_rects = {}
-
+        
     def calcular_escala(self):
         self.min_lat, self.max_lat = float('inf'), float('-inf')
         self.min_lon, self.max_lon = float('inf'), float('-inf')
@@ -243,6 +251,9 @@ class Gui:
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:
                     mx, my = event.pos
+
+                    if self.btn_alterar_transito.collidepoint(mx, my):
+                        acoes.append(("alterar_transito_global", None))
                     
                     # Dropdown de algoritmo
                     if self.dropdown_algoritmo_aberto:
@@ -335,20 +346,30 @@ class Gui:
                             self.popup_ativo = None
                         
                         elif self.ui_rects.get('btn_menos_pax', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
-                            num = max(1, int(self.input_pedido_passageiros or 1) - 1)
+                            num = max(1, int(self.input_pedido_passageiros) - 1)
                             self.input_pedido_passageiros = str(num)
                         elif self.ui_rects.get('btn_mais_pax', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
-                            num = min(6, int(self.input_pedido_passageiros or 1) + 1)
+                            num = min(6, int(self.input_pedido_passageiros) + 1)
                             self.input_pedido_passageiros = str(num)
                         
-                        elif self.ui_rects.get('btn_confirmar_pedido', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
+                        elif self.ui_rects.get('btn_pref_indiferente').collidepoint(mx, my):
+                            self.input_pedido_pref_ambiental = "indiferente"
+                        elif self.ui_rects.get('btn_pref_preferencia_eletrico').collidepoint(mx, my):
+                            self.input_pedido_pref_ambiental = "preferencia_eletrico"
+                        elif self.ui_rects.get('btn_pref_apenas_eletrico').collidepoint(mx, my):
+                            self.input_pedido_pref_ambiental = "apenas_eletrico"
+
+                        # Atualiza o envio do pedido no btn_confirmar_pedido
+                        elif self.ui_rects.get('btn_confirmar_pedido').collidepoint(mx, my):
                             if self.input_pedido_origem and self.input_pedido_destino:
                                 acoes.append(("criar_pedido_manual", {
                                     "origem": self.input_pedido_origem,
                                     "destino": self.input_pedido_destino,
                                     "num_passageiros": int(self.input_pedido_passageiros or 1),
-                                    "premium": self.input_pedido_premium
+                                    "premium": self.input_pedido_premium,
+                                    "preferencia_ambiental": self.input_pedido_pref_ambiental # Nova chave
                                 }))
+                                self.popup_ativo = None
                                 self.popup_ativo = None
                         elif self.ui_rects.get('btn_cancelar', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
                             self.popup_ativo = None
@@ -484,29 +505,29 @@ class Gui:
 
     def desenhar_form_pedido(self):
         self._desenhar_fundo_modal()
-        w, h = 520, 480
+        # Aumentamos ligeiramente a altura (h) para 520 para dar ar às opções
+        w, h = 520, 520 
         cx, cy = LARGURA_TOTAL//2 - w//2, ALTURA//2 - h//2
         rect_janela = pygame.Rect(cx, cy, w, h)
         self._desenhar_janela(rect_janela)
         self.screen.blit(self.font_titulo.render("NOVO PEDIDO", True, COR_TEXTO), (cx + 40, cy + 20))
         
-        # Origem
+        # --- Origem ---
         self.screen.blit(self.font_texto.render("Nó de Origem:", True, COR_TEXTO), (cx + 50, cy + 70))
         self.ui_rects['input_origem'] = pygame.Rect(cx + 50, cy + 90, 220, 35)
         self.ui_rects['btn_sel_origem'] = pygame.Rect(cx + 280, cy + 90, 90, 35)
         self._desenhar_input(self.ui_rects['input_origem'], self.input_pedido_origem, self.campo_focado == 'pedido_origem')
         self.desenhar_botao(self.ui_rects['btn_sel_origem'], "Mapa", COR_BTN_SELECIONAR, pequena_fonte=True)
         
-        # Destino
+        # --- Destino ---
         self.screen.blit(self.font_texto.render("Nó de Destino:", True, COR_TEXTO), (cx + 50, cy + 140))
         self.ui_rects['input_destino'] = pygame.Rect(cx + 50, cy + 160, 220, 35)
         self.ui_rects['btn_sel_destino'] = pygame.Rect(cx + 280, cy + 160, 90, 35)
         self._desenhar_input(self.ui_rects['input_destino'], self.input_pedido_destino, self.campo_focado == 'pedido_destino')
         self.desenhar_botao(self.ui_rects['btn_sel_destino'], "Mapa", COR_BTN_SELECIONAR, pequena_fonte=True)
         
-        # Número de Passageiros
+        # --- Número de Passageiros ---
         self.screen.blit(self.font_texto.render("Passageiros:", True, COR_TEXTO), (cx + 50, cy + 210))
-        
         self.ui_rects['btn_menos_pax'] = pygame.Rect(cx + 50, cy + 235, 40, 35)
         self.ui_rects['input_passageiros'] = pygame.Rect(cx + 100, cy + 235, 60, 35)
         self.ui_rects['btn_mais_pax'] = pygame.Rect(cx + 170, cy + 235, 40, 35)
@@ -521,24 +542,31 @@ class Gui:
             info_text = "Requer TaxiXL (5-6 passageiros)"
             self.screen.blit(self.font_pequena.render(info_text, True, COR_PEDIDO_TAXIXL), (cx + 50, cy + 280))
         
-        # Checkbox Premium
-        self.ui_rects['checkbox_premium'] = pygame.Rect(cx + 50, cy + 315, 20, 20)
+        # --- Checkbox Premium ---
+        self.ui_rects['checkbox_premium'] = pygame.Rect(cx + 50, cy + 305, 20, 20)
         cor_check = (255, 215, 0) if self.input_pedido_premium else (100, 100, 100)
         pygame.draw.rect(self.screen, cor_check, self.ui_rects['checkbox_premium'], border_radius=3)
         if self.input_pedido_premium:
-            pygame.draw.line(self.screen, (0,0,0), (cx+52, cy+325), (cx+60, cy+332), 2)
-            pygame.draw.line(self.screen, (0,0,0), (cx+60, cy+332), (cx+68, cy+318), 2)
-        self.screen.blit(self.font_texto.render("Cliente Premium (30min)", True, COR_TEXTO), (cx + 80, cy + 315))
-        
-        # Botões de ação
-        self.ui_rects['btn_confirmar_pedido'] = pygame.Rect(cx + 50, cy + 380, 160, 50)
-        self.ui_rects['btn_cancelar'] = pygame.Rect(cx + 220, cy + 380, 160, 50)
-        self.desenhar_botao(self.ui_rects['btn_confirmar_pedido'], "CRIAR", COR_BTN_ACAO)
-        self.desenhar_botao(self.ui_rects['btn_cancelar'], "CANCELAR", (100, 100, 100))
+            pygame.draw.line(self.screen, (0,0,0), (cx+52, cy+315), (cx+60, cy+322), 2)
+            pygame.draw.line(self.screen, (0,0,0), (cx+60, cy+322), (cx+68, cy+308), 2)
+        self.screen.blit(self.font_texto.render("Cliente Premium", True, COR_TEXTO), (cx + 80, cy + 305))
 
-        # Botões de ação
-        self.ui_rects['btn_confirmar_pedido'] = pygame.Rect(cx + 50, cy + 380, 160, 50)
-        self.ui_rects['btn_cancelar'] = pygame.Rect(cx + 220, cy + 380, 160, 50)
+        # --- Preferência Ambiental (REPOSICIONADO) ---
+        y_pref = cy + 345
+        self.screen.blit(self.font_texto.render("Preferência de Motor:", True, COR_TEXTO), (cx + 50, y_pref))
+        
+        opcoes_pref = [("indiferente", "Indiferente"), ("preferencia_eletrico", "Pref. Elétrico"), ("apenas_eletrico", "Só Elétrico")]
+        for i, (valor, label) in enumerate(opcoes_pref):
+            rect_opt = pygame.Rect(cx + 50 + (i * 125), y_pref + 25, 115, 30)
+            self.ui_rects[f'btn_pref_{valor}'] = rect_opt
+            cor_btn = (0, 150, 200) if self.input_pedido_pref_ambiental == valor else (80, 80, 80)
+            self.desenhar_botao(rect_opt, label, cor_btn, pequena_fonte=True)
+
+        # --- Botões de Ação (REPOSICIONADOS PARA O FUNDO) ---
+        y_botoes_final = cy + 440
+        self.ui_rects['btn_confirmar_pedido'] = pygame.Rect(cx + 50, y_botoes_final, 160, 50)
+        self.ui_rects['btn_cancelar'] = pygame.Rect(cx + 220, y_botoes_final, 160, 50)
+        
         self.desenhar_botao(self.ui_rects['btn_confirmar_pedido'], "CRIAR", COR_BTN_ACAO)
         self.desenhar_botao(self.ui_rects['btn_cancelar'], "CANCELAR", (100, 100, 100))
 
@@ -559,12 +587,14 @@ class Gui:
         self.screen.blit(txt_surf, (rect.x + 5, rect.y + 5))
 
     def desenhar_barra_lateral(self, dados):
+        # 1. Fundo e Linha Divisória
         pygame.draw.rect(self.screen, COR_FUNDO_BARRA, (LARGURA_MAPA, 0, LARGURA_BARRA, ALTURA))
         pygame.draw.line(self.screen, COR_SEPARADOR, (LARGURA_MAPA, 0), (LARGURA_MAPA, ALTURA), 2)
 
         x = LARGURA_MAPA + 20
         y = 15
         
+        # 2. Título e Filtros (usando os rects configurados no __init__)
         self.screen.blit(self.font_titulo.render("CONTROLO E FILTROS", True, COR_TEXTO), (x, y))
         
         nomes_filtro = {
@@ -575,102 +605,75 @@ class Gui:
             cor = COR_BTN_ATIVO if self.filtros[k] else COR_BTN_INATIVO
             self.desenhar_botao(r, nomes_filtro[k], cor)
 
-        # Botão do Algoritmo
-        texto_alg = self.algoritmos_disponiveis[self.algoritmo_selecionado]
-        self.desenhar_botao(self.btn_algoritmo, f"Algoritmo: {texto_alg}", COR_BTN_ALGORITMO)
+        # 3. Botões de Algoritmo e Trânsito
+        self.desenhar_botao(self.btn_algoritmo, f"Algoritmo: {self.algoritmos_disponiveis[self.algoritmo_selecionado]}", COR_BTN_ALGORITMO)
+        self.desenhar_botao(self.btn_alterar_transito, "ALTERAR TRÂNSITO", (200, 100, 0))
         
         # Seta do dropdown
         cx, cy = self.btn_algoritmo.right - 15, self.btn_algoritmo.centery
         seta = [(cx-5, cy-3), (cx+5, cy-3), (cx, cy+3)]
         pygame.draw.polygon(self.screen, (255,255,255), seta)
         
-        y = 230
-        pygame.draw.line(self.screen, COR_SEPARADOR, (x, y), (LARGURA_TOTAL-20, y), 1)
-        y += 20
+        # 4. Listagem Dinâmica com Limite de Altura
+        y = 270
+        pygame.draw.line(self.screen, COR_SEPARADOR, (x, y - 10), (LARGURA_TOTAL - 20, y - 10), 1)
+        
+        # Definimos um limite para os dados não passarem por cima dos botões de ação
+        limite_y = self.btn_novo_carro.y - 20 
 
         # Tempo
-        if self.filtros['tempo']:
+        if self.filtros['tempo'] and y < limite_y:
             self.screen.blit(self.font_titulo.render(f"HORA: {dados.get('tempo')}", True, COR_TEXTO), (x, y))
             y += 30
 
         # Veículos Detalhados
-        if self.filtros['veiculos']:
+        if self.filtros['veiculos'] and y < limite_y:
             self.screen.blit(self.font_titulo.render("VEICULOS", True, (0, 255, 127)), (x, y))
             y += 25
             for v in dados.get('veiculos', []):
-                if y > ALTURA - 140: break
+                if y > limite_y - 40: break # Para de desenhar se chegar perto dos botões
                 
                 categoria = v.get('categoria', 'TAXI')
-                if categoria == 'TaxiXL':
-                    cor = (138, 43, 226) if v['ocupado'] else (100, 255, 100)
-                    icone = "TAXIXL"
-                else:
-                    cor = COR_TAXI_OCUPADO if v['ocupado'] else COR_TAXI_LIVRE
-                    icone = "CAR"
-                
+                icone = "TAXIXL" if categoria == 'TaxiXL' else "CAR"
+                cor = (138, 43, 226) if categoria == 'TaxiXL' and v['ocupado'] else (COR_TAXI_OCUPADO if v['ocupado'] else COR_TAXI_LIVRE)
                 tipo_motor = "E" if v.get('tipo_str') == "eletrico" else "C"
                 
-                self.screen.blit(self.font_texto.render(
-                    f"[{icone}][{tipo_motor}] {v['id']} | {v['estado_texto']}",
-                    True, cor
-                ), (x, y))
+                self.screen.blit(self.font_texto.render(f"[{icone}][{tipo_motor}] {v['id']} | {v['estado_texto']}", True, cor), (x, y))
                 y += 15
-                
-                cap = v.get('capacidade', 4)
-                self.screen.blit(self.font_pequena.render(
-                    f"   Cap: {cap} | Bat: {v['bateria']*100:.0f}%",
-                    True, COR_TEXTO_SECUNDARIO
-                ), (x, y))
+                self.screen.blit(self.font_pequena.render(f"   Cap: {v.get('capacidade', 4)} | Bat: {v['bateria']*100:.0f}%", True, COR_TEXTO_SECUNDARIO), (x, y))
                 y += 20
 
         # Pedidos
-        if self.filtros['pedidos'] and y < ALTURA - 120:
+        if self.filtros['pedidos'] and y < limite_y:
             y += 10
-            self.screen.blit(self.font_titulo.render(
-                f"PEDIDOS ({len(dados.get('pedidos',[]))})",
-                True, (255, 200, 0)
-            ), (x, y))
+            self.screen.blit(self.font_titulo.render(f"PEDIDOS ({len(dados.get('pedidos',[]))})", True, (255, 200, 0)), (x, y))
             y += 25
-            
             for p in dados.get('pedidos', []):
-                if y > ALTURA - 120: break
+                if y > limite_y - 30: break
                 
                 prioridade = p.get('prioridade', 'NORMAL')
-                if prioridade == 'CRITICO':
-                    cor_prior = COR_PEDIDO_CRITICO
-                    icone = "[!]"
-                elif prioridade == 'PREMIUM':
-                    cor_prior = COR_PEDIDO_PREMIUM
-                    icone = "[*]"
-                else:
-                    cor_prior = COR_PEDIDO_NORMAL
-                    icone = "[-]"
+                cor_prior = COR_PEDIDO_CRITICO if prioridade == 'CRITICO' else (COR_PEDIDO_PREMIUM if prioridade == 'PREMIUM' else COR_PEDIDO_NORMAL)
                 
-                num_pax = p.get('num_passageiros', 1)
-                pax_info = f"{num_pax}pax"
-                if num_pax > 4:
+                pax_info = f"{p.get('num_passageiros', 1)}pax"
+                if p.get('num_passageiros', 1) > 4: 
                     pax_info += " [XL]"
                     cor_prior = COR_PEDIDO_TAXIXL
                 
-                self.screen.blit(self.font_texto.render(
-                    f"{icone} {p['id']}: {p['origem']}->{p['destino']} ({pax_info})",
-                    True, cor_prior
-                ), (x, y))
+                self.screen.blit(self.font_texto.render(f"{p['id']}: {p['origem']}->{p['destino']} ({pax_info})", True, cor_prior), (x, y))
                 y += 15
-                
-                if 'restante' in p:
-                    self.screen.blit(self.font_pequena.render(
-                        f"   Restam: {p['restante']}",
-                        True, COR_TEXTO_SECUNDARIO
-                    ), (x, y))
-                    y += 15
 
-        # Botões de Ação
+        # 5. Desenhar Botões de Ação (No fundo, lado a lado)
+        # Os Rects btn_novo_carro e btn_novo_pedido já estão definidos no __init__
         self.desenhar_botao(self.btn_novo_carro, "+ CARRO", COR_BTN_ACAO)
         self.desenhar_botao(self.btn_novo_pedido, "+ PEDIDO", COR_BTN_ACAO)
 
     def desenhar(self, dados):
         if not self.running: return []
+
+        if self.cache_mapa_surface is None:
+            self._gerar_cache_mapa()
+        
+        self.screen.blit(self.cache_mapa_surface, (0, 0))
 
         acoes = self.processar_eventos()
         

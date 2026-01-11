@@ -26,33 +26,34 @@ def get_dados_visuais(sim):
             'ocupado': ocupado,
             'estado_texto': v.estado.value.upper(), 
             'passageiros': v.passageiros_atuais,
-            'rota': rota
+            'rota': rota,
+            'capacidade': v.capacidade, # Adiciona esta linha
+            'tipo_str': v.tipo_str,     # Útil para os ícones
+            'categoria': v.categoria_veiculo # Útil para distinguir TAXI de TaxiXL
         })
     
     # 2. Dados dos Pedidos Pendentes (COM PRIORIDADE E TEMPO RESTANTE)
     dados_pedidos = []
     for p in sim.estado.pedidos_pendentes:
         # Calcular tempo de espera
-        tempo_espera = (sim.tempo_atual - p.timestamp).total_seconds() / 60.0
+        dados_pedidos = []
+    for p in sim.estado.pedidos_pendentes:
+        # CORREÇÃO: Usar sim.tempo_atual (Simulação) em vez de datetime.now() (Sistema)
+        passado_segundos = (sim.tempo_atual - p.timestamp).total_seconds()
+        passado_minutos = passado_segundos / 60.0
         
-        # Calcular tempo restante até expirar
-        tempo_restante = p.tempo_espera_maximo - tempo_espera
-        tempo_restante = max(0, tempo_restante) 
+        # p.tempo_espera_maximo deve estar em minutos (ex: 30)
+        restante = max(0, p.tempo_espera_maximo - passado_minutos)
         
         dados_pedidos.append({
             'id': p.id,
             'origem': p.origem,
             'destino': p.destino,
-            'espera': f"{tempo_espera:.1f}m",
-            'restante': f"{tempo_restante:.1f}m",
-            'prioridade': p.prioridade.name,  # NORMAL/PREMIUM/CRITICO
+            'restante': f"{restante:.1f}m",
+            'prioridade': p.prioridade.name,
+            'num_passageiros': p.num_passageiros
         })
-        
-    return {
-        'tempo': sim.tempo_atual.strftime("%H:%M"),
-        'veiculos': dados_veiculos,
-        'pedidos': dados_pedidos
-    }
+    return {'veiculos': dados_veiculos, 'pedidos': dados_pedidos, 'tempo': sim.tempo_atual.strftime("%H:%M")}
 
 def inicializar_frota_bateria_baixa(sim, percentagem_bateria=0.20):
     """
@@ -83,7 +84,7 @@ def main():
     inicializar_frota_bateria_baixa(sim, percentagem_bateria=0.20)
     
     # 3. Inicializar GUI
-    gui = Gui(caminho_dados)
+    gui = Gui(sim.grafo)
     
     print("=" * 60)
     print(" TAXIGREEN - SISTEMA DE GESTÃO INTELIGENTE DE FROTA")
@@ -132,14 +133,15 @@ def main():
             elif acao == "criar_pedido_manual":
                 orig = parametros['origem']
                 dest = parametros['destino']
-                premium = parametros.get('premium', False)  # Ler flag premium
+                pax = parametros.get('num_passageiros', 1)
+                premium = parametros.get('premium', False)
+                pref_amb = parametros.get('preferencia_ambiental', "indiferente") # Lê a preferência
+                
                 try:
-                    sim.criar_pedido_manual(orig, dest, premium=premium)
+                    # Adiciona o argumento pref_ambiental na chamada
+                    sim.criar_pedido_manual(orig, dest, pax, premium=premium, pref_ambiental=pref_amb)
                     dados = get_dados_visuais(sim)
-                    tipo = "PREMIUM" if premium else "NORMAL"
-                    print(f"✅ Pedido {tipo} criado: {orig} → {dest}")
-                except AttributeError:
-                    print("ERRO: O método 'criar_pedido_manual' não existe no Simulador.")
+                    print(f"✅ Pedido criado com preferência: {pref_amb}")
                 except Exception as e:
                     print(f"ERRO ao criar pedido: {e}")
 
@@ -164,6 +166,12 @@ def main():
                 sim.definir_algoritmo(parametros)
                 dados = get_dados_visuais(sim)
                 print(f"🔄 Algoritmo alterado para: {parametros}")
+
+            elif acao == "alterar_transito_global":
+                sim.alterar_transito_aleatorio()
+                # Forçar atualização do cache do mapa para mostrar as cores novas (Amarelo/Vermelho)
+                gui.cache_mapa_surface = None 
+                print("✅ Trânsito alterado e rotas invalidadas.")
 
 if __name__ == "__main__":
     main()
