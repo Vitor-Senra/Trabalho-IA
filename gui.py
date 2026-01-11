@@ -54,7 +54,7 @@ COR_BTN_ALGORITMO = (120, 0, 200)
 class Gui:
     def __init__(self, caminho_json):
         pygame.init()
-        pygame.display.set_caption("TaxiXLreen - Sistema Multi-Capacidade")
+        pygame.display.set_caption("TaxiGreen - Sistema Multi-Capacidade")
         self.screen = pygame.display.set_mode((LARGURA_TOTAL, ALTURA))
         
         self.font_titulo = pygame.font.SysFont("Arial", 18, bold=True)
