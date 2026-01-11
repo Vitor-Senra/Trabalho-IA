@@ -5,7 +5,7 @@ from src.core.grafo import Grafo
 
 # --- CONFIGURAÇÕES ---
 LARGURA_MAPA = 1000
-LARGURA_BARRA = 400  # Aumentado para mais informação
+LARGURA_BARRA = 400
 LARGURA_TOTAL = LARGURA_MAPA + LARGURA_BARRA
 ALTURA = 800
 
@@ -25,15 +25,15 @@ COR_ESTACAO_ELETRICA = (0, 200, 255)
 COR_POSTO_COMBUSTIVEL = (255, 140, 0)
 COR_NOS_PADRAO = (100, 100, 100)
 
-# Cores Veículos (NOVO: Diferenciação TAXI vs taxiXL)
+# Cores Veículos
 COR_TAXI_LIVRE = (0, 255, 0)
 COR_TAXI_OCUPADO = (255, 50, 50)
 COR_TAXIXL_LIVRE = (100, 255, 100)
 COR_TAXIXL_OCUPADO = (255, 100, 100)
 
 # Cores Pedidos
-COR_PEDIDO_NORMAL = (255, 255, 255)    
-COR_PEDIDO_PREMIUM = (255, 215, 0)     
+COR_PEDIDO_NORMAL = (255, 255, 255)
+COR_PEDIDO_PREMIUM = (255, 215, 0)
 COR_PEDIDO_CRITICO = (255, 0, 0)
 COR_PEDIDO_TAXIXL = (138, 43, 226)
 
@@ -54,7 +54,7 @@ COR_BTN_ALGORITMO = (120, 0, 200)
 class Gui:
     def __init__(self, caminho_json):
         pygame.init()
-        pygame.display.set_caption("taxiXLreen - Sistema Multi-Capacidade")
+        pygame.display.set_caption("TaxiXLreen - Sistema Multi-Capacidade")
         self.screen = pygame.display.set_mode((LARGURA_TOTAL, ALTURA))
         
         self.font_titulo = pygame.font.SysFont("Arial", 18, bold=True)
@@ -66,31 +66,30 @@ class Gui:
         self.calcular_escala()
         self.running = True
 
-        # --- VARIÁVEIS DE ESTADO DOS FORMULÁRIOS ---
+        # Variáveis de estado dos formulários
         self.input_carro_no = ""
         self.input_pedido_origem = ""
         self.input_pedido_destino = ""
-        self.input_pedido_passageiros = "1"  # NOVO: Campo de passageiros
+        self.input_pedido_passageiros = "1"
         self.campo_focado = None
         
-        # NOVO: Tipo de veículo (4 opções)
-        self.input_tipo_carro = "taxi_eletrico"  # taxi_eletrico, taxi_combustao, taxiXL_eletrica, taxiXL_combustao
-        self.input_pedido_premium = False  
-        self.modo_selecao = None 
+        self.input_tipo_carro = "taxi_eletrico"
+        self.input_pedido_premium = False
+        self.modo_selecao = None
 
         # Estados de Filtro
         self.filtros = {
-            'veiculos': True, 
-            'pedidos': True, 
-            'rotas': True, 
-            'tempo': True, 
+            'veiculos': True,
+            'pedidos': True,
+            'rotas': True,
+            'tempo': True,
             'transito': True
         }
         
-        # --- SELETOR DE ALGORITMO ---
+        # Seletor de Algoritmo
         self.algoritmos_disponiveis = [
             "A* (Ótimo)",
-            "Greedy (Rápido)", 
+            "Greedy (Rápido)",
             "Hill Climbing (Local)",
             "DFS (Profundidade)",
             "BFS (Largura)",
@@ -99,11 +98,11 @@ class Gui:
         self.algoritmo_selecionado = 0
         self.dropdown_algoritmo_aberto = False
         
-        # --- CACHE DO MAPA (OTIMIZAÇÃO) ---
+        # Cache do mapa (otimização)
         self.cache_mapa_surface = None
         self.ultimo_estado_transito = None
         
-        # --- DEFINIÇÃO DE BOTÕES ---
+        # Definição de botões
         x_base = LARGURA_MAPA + 20
         self.botoes_filtro = {
             'veiculos': pygame.Rect(x_base, 60, 140, 30),
@@ -119,7 +118,7 @@ class Gui:
         self.btn_novo_carro = pygame.Rect(x_base, y_acao, 140, 50)
         self.btn_novo_pedido = pygame.Rect(x_base + 150, y_acao, 140, 50)
 
-        self.popup_ativo = None 
+        self.popup_ativo = None
         self.rect_popup_random = None
         self.rect_popup_custom = None
         
@@ -208,14 +207,14 @@ class Gui:
                 self.running = False
                 pygame.quit(); sys.exit()
             
-            # --- INPUT DE TEXTO ---
+            # Input de texto
             if event.type == pygame.KEYDOWN and self.campo_focado:
                 texto_atual = ""
-                if self.campo_focado == 'carro_no': 
+                if self.campo_focado == 'carro_no':
                     texto_atual = self.input_carro_no
-                elif self.campo_focado == 'pedido_origem': 
+                elif self.campo_focado == 'pedido_origem':
                     texto_atual = self.input_pedido_origem
-                elif self.campo_focado == 'pedido_destino': 
+                elif self.campo_focado == 'pedido_destino':
                     texto_atual = self.input_pedido_destino
                 elif self.campo_focado == 'pedido_passageiros':
                     texto_atual = self.input_pedido_passageiros
@@ -223,7 +222,6 @@ class Gui:
                 if event.key == pygame.K_BACKSPACE:
                     texto_atual = texto_atual[:-1]
                 else:
-                    # Campo passageiros aceita apenas números
                     if self.campo_focado == 'pedido_passageiros':
                         if event.unicode.isdigit() and len(texto_atual) < 1:
                             texto_atual += event.unicode
@@ -231,11 +229,11 @@ class Gui:
                         if len(texto_atual) < 10 and event.unicode.isalnum():
                             texto_atual += event.unicode
                 
-                if self.campo_focado == 'carro_no': 
+                if self.campo_focado == 'carro_no':
                     self.input_carro_no = texto_atual
-                elif self.campo_focado == 'pedido_origem': 
+                elif self.campo_focado == 'pedido_origem':
                     self.input_pedido_origem = texto_atual
-                elif self.campo_focado == 'pedido_destino': 
+                elif self.campo_focado == 'pedido_destino':
                     self.input_pedido_destino = texto_atual
                 elif self.campo_focado == 'pedido_passageiros':
                     self.input_pedido_passageiros = texto_atual
@@ -246,14 +244,14 @@ class Gui:
                 if event.button == 1:
                     mx, my = event.pos
                     
-                    # --- DROPDOWN DE ALGORITMO ---
+                    # Dropdown de algoritmo
                     if self.dropdown_algoritmo_aberto:
                         y_dropdown = self.btn_algoritmo.bottom
                         for i, alg in enumerate(self.algoritmos_disponiveis):
                             rect_opcao = pygame.Rect(
-                                self.btn_algoritmo.x, 
-                                y_dropdown + i * 30, 
-                                self.btn_algoritmo.width, 
+                                self.btn_algoritmo.x,
+                                y_dropdown + i * 30,
+                                self.btn_algoritmo.width,
                                 30
                             )
                             if rect_opcao.collidepoint(mx, my):
@@ -268,7 +266,7 @@ class Gui:
                         self.dropdown_algoritmo_aberto = not self.dropdown_algoritmo_aberto
                         return acoes
                     
-                    # --- MODO DE SELEÇÃO NO MAPA ---
+                    # Modo de seleção no mapa
                     if self.modo_selecao:
                         no_selecionado = self.obter_no_sob_mouse((mx, my))
                         if no_selecionado:
@@ -284,7 +282,7 @@ class Gui:
                             self.modo_selecao = None
                         continue
 
-                    # --- FORMULÁRIO CARRO ---
+                    # Formulário carro
                     if self.popup_ativo == 'form_carro':
                         if self.ui_rects.get('input_carro_no', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
                             self.campo_focado = 'carro_no'
@@ -295,15 +293,14 @@ class Gui:
                             self.modo_selecao = 'selecionar_carro'
                             self.popup_ativo = None
                         
-                        # NOVO: 4 botões de tipo de veículo
                         elif self.ui_rects.get('btn_taxi_eletrico', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
                             self.input_tipo_carro = "taxi_eletrico"
                         elif self.ui_rects.get('btn_taxi_combustao', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
                             self.input_tipo_carro = "taxi_combustao"
-                        elif self.ui_rects.get('btn_taxiXL_eletrica', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
-                            self.input_tipo_carro = "taxiXL_eletrica"
-                        elif self.ui_rects.get('btn_taxiXL_combustao', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
-                            self.input_tipo_carro = "taxiXL_combustao"
+                        elif self.ui_rects.get('btn_taxixl_eletrica', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
+                            self.input_tipo_carro = "taxixl_eletrica"
+                        elif self.ui_rects.get('btn_taxixl_combustao', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
+                            self.input_tipo_carro = "taxixl_combustao"
                         
                         elif self.ui_rects.get('btn_confirmar_carro', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
                             if self.input_carro_no:
@@ -316,7 +313,7 @@ class Gui:
                             self.popup_ativo = None
                         continue
 
-                    # --- FORMULÁRIO PEDIDO ---
+                    # Formulário pedido
                     if self.popup_ativo == 'form_pedido':
                         if self.ui_rects.get('input_origem', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
                             self.campo_focado = 'pedido_origem'
@@ -327,7 +324,6 @@ class Gui:
                         else:
                             self.campo_focado = None
                         
-                        # Checkbox Premium
                         if self.ui_rects.get('checkbox_premium', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
                             self.input_pedido_premium = not self.input_pedido_premium
                         
@@ -338,7 +334,6 @@ class Gui:
                             self.modo_selecao = 'selecionar_destino'
                             self.popup_ativo = None
                         
-                        # Botões +/- de passageiros
                         elif self.ui_rects.get('btn_menos_pax', pygame.Rect(0,0,0,0)).collidepoint(mx, my):
                             num = max(1, int(self.input_pedido_passageiros or 1) - 1)
                             self.input_pedido_passageiros = str(num)
@@ -359,7 +354,7 @@ class Gui:
                             self.popup_ativo = None
                         continue
 
-                    # --- POPUP INICIAL ---
+                    # Popup inicial
                     if self.popup_ativo in ['carro', 'pedido']:
                         if self.rect_popup_random and self.rect_popup_random.collidepoint(mx, my):
                             acoes.append((f"add_{self.popup_ativo}", "random"))
@@ -378,7 +373,7 @@ class Gui:
                             self.popup_ativo = None
                         continue
 
-                    # --- BOTÕES DA INTERFACE ---
+                    # Botões da interface
                     for chave, rect in self.botoes_filtro.items():
                         if rect.collidepoint(mx, my):
                             self.filtros[chave] = not self.filtros[chave]
@@ -394,7 +389,7 @@ class Gui:
         if not rect: return
         mx, my = pygame.mouse.get_pos()
         cor = cor_base
-        if rect.collidepoint(mx, my): 
+        if rect.collidepoint(mx, my):
             cor = (min(cor[0]+30, 255), min(cor[1]+30, 255), min(cor[2]+30, 255))
         
         pygame.draw.rect(self.screen, cor, rect, border_radius=5)
@@ -414,9 +409,9 @@ class Gui:
         
         for i, alg in enumerate(self.algoritmos_disponiveis):
             rect_opcao = pygame.Rect(
-                self.btn_algoritmo.x, 
-                y_dropdown + i * 30, 
-                self.btn_algoritmo.width, 
+                self.btn_algoritmo.x,
+                y_dropdown + i * 30,
+                self.btn_algoritmo.width,
                 30
             )
             
@@ -445,7 +440,7 @@ class Gui:
         
     def desenhar_form_carro(self):
         self._desenhar_fundo_modal()
-        w, h = 420, 420  # Aumentado para 4 botões
+        w, h = 420, 420
         cx, cy = LARGURA_TOTAL//2 - w//2, ALTURA//2 - h//2
         rect_janela = pygame.Rect(cx, cy, w, h)
         self._desenhar_janela(rect_janela)
@@ -458,28 +453,28 @@ class Gui:
         self._desenhar_input(self.ui_rects['input_carro_no'], self.input_carro_no, self.campo_focado == 'carro_no')
         self.desenhar_botao(self.ui_rects['btn_sel_carro'], "Mapa", COR_BTN_SELECIONAR, pequena_fonte=True)
         
-        # NOVO: 4 tipos de veículo (2x2 grid)
+        # 4 tipos de veículo
         self.screen.blit(self.font_titulo.render("TIPO DE VEÍCULO:", True, COR_TEXTO), (cx + 50, cy + 140))
         
-        # Linha 1: TAXIs (4 passageiros)
+        # Linha 1: TAXIs
         self.ui_rects['btn_taxi_eletrico'] = pygame.Rect(cx + 50, cy + 170, 160, 50)
         self.ui_rects['btn_taxi_combustao'] = pygame.Rect(cx + 220, cy + 170, 160, 50)
         
         cor_te = (0, 200, 100) if self.input_tipo_carro == "taxi_eletrico" else (60, 60, 60)
         cor_tc = (200, 100, 50) if self.input_tipo_carro == "taxi_combustao" else (60, 60, 60)
         
-        self.desenhar_botao(self.ui_rects['btn_taxi_eletrico'], "🚗⚡ TAXI\n(4 pax)", cor_te, pequena_fonte=True)
-        self.desenhar_botao(self.ui_rects['btn_taxi_combustao'], "🚗⛽ TAXI\n(4 pax)", cor_tc, pequena_fonte=True)
+        self.desenhar_botao(self.ui_rects['btn_taxi_eletrico'], "TAXI Eletrico\n(4 pax)", cor_te, pequena_fonte=True)
+        self.desenhar_botao(self.ui_rects['btn_taxi_combustao'], "TAXI Combustao\n(4 pax)", cor_tc, pequena_fonte=True)
         
-        # Linha 2: taxiXLs (6 passageiros)
-        self.ui_rects['btn_taxiXL_eletrica'] = pygame.Rect(cx + 50, cy + 230, 160, 50)
-        self.ui_rects['btn_taxiXL_combustao'] = pygame.Rect(cx + 220, cy + 230, 160, 50)
+        # Linha 2: TaxiXLs
+        self.ui_rects['btn_taxixl_eletrica'] = pygame.Rect(cx + 50, cy + 230, 160, 50)
+        self.ui_rects['btn_taxixl_combustao'] = pygame.Rect(cx + 220, cy + 230, 160, 50)
         
-        cor_ve = (0, 180, 200) if self.input_tipo_carro == "taxiXL_eletrica" else (60, 60, 60)
-        cor_vc = (200, 120, 0) if self.input_tipo_carro == "taxiXL_combustao" else (60, 60, 60)
+        cor_ve = (0, 180, 200) if self.input_tipo_carro == "taxixl_eletrica" else (60, 60, 60)
+        cor_vc = (200, 120, 0) if self.input_tipo_carro == "taxixl_combustao" else (60, 60, 60)
         
-        self.desenhar_botao(self.ui_rects['btn_taxiXL_eletrica'], "🚐⚡ taxiXL\n(6 pax)", cor_ve, pequena_fonte=True)
-        self.desenhar_botao(self.ui_rects['btn_taxiXL_combustao'], "🚐⛽ taxiXL\n(6 pax)", cor_vc, pequena_fonte=True)
+        self.desenhar_botao(self.ui_rects['btn_taxixl_eletrica'], "TaxiXL Eletrica\n(6 pax)", cor_ve, pequena_fonte=True)
+        self.desenhar_botao(self.ui_rects['btn_taxixl_combustao'], "TaxiXL Combustao\n(6 pax)", cor_vc, pequena_fonte=True)
         
         # Botões de ação
         self.ui_rects['btn_confirmar_carro'] = pygame.Rect(cx + 50, cy + 330, 160, 50)
@@ -487,39 +482,7 @@ class Gui:
         self.desenhar_botao(self.ui_rects['btn_confirmar_carro'], "CRIAR", COR_BTN_ACAO)
         self.desenhar_botao(self.ui_rects['btn_cancelar'], "CANCELAR", (100, 100, 100))
 
-    def desenhar_form_pedido(self):
-        self._desenhar_fundo_modal()
-        w, h = 420, 480  # Aumentado para campo passageiros
-        cx, cy = LARGURA_TOTAL//2 - w//2, ALTURA//2 - h//2
-        rect_janela = pygame.Rect(cx, cy, w, h)
-        self._desenhar_janela(rect_janela)
-        self.screen.blit(self.font_titulo.render("NOVO PEDIDO", True, COR_TEXTO), (cx + 40, cy + 20))
-        
-        # Origem
-        self.screen.blit(self.font_texto.render("Origem:", True, COR_TEXTO), (cx + 50, cy + 60))
-        self.ui_rects['input_origem'] = pygame.Rect(cx + 50, cy + 80, 220, 35)
-        self.ui_rects['btn_sel_origem'] = pygame.Rect(cx + 280, cy + 80, 90, 35)
-        self._desenhar_input(self.ui_rects['input_origem'], self.input_pedido_origem, self.campo_focado == 'pedido_origem')
-        self.desenhar_botao(self.ui_rects['btn_sel_origem'], "Mapa", COR_BTN_SELECIONAR, pequena_fonte=True)
-        
-        # Destino
-        self.screen.blit(self.font_texto.render("Destino:", True, COR_TEXTO), (cx + 50, cy + 130))
-        self.ui_rects['input_destino'] = pygame.Rect(cx + 50, cy + 150, 220, 35)
-        self.ui_rects['btn_sel_destino'] = pygame.Rect(cx + 280, cy + 150, 90, 35)
-        self._desenhar_input(self.ui_rects['input_destino'], self.input_pedido_destino, self.campo_focado == 'pedido_destino')
-        self.desenhar_botao(self.ui_rects['btn_sel_destino'], "Mapa", COR_BTN_SELECIONAR, pequena_fonte=True)
-
-        # Número de Passageiros
-        self.screen.blit(self.font_texto.render("Passageiros:", True, COR_TEXTO), (cx + 50, cy + 200))
-        self.ui_rects['btn_menos_pax'] = pygame.Rect(cx + 50, cy + 220, 60, 35)
-        self.ui_rects['input_passageiros'] = pygame.Rect(cx + 120, cy + 220, 100, 35)
-        self.ui_rects['btn_mais_pax'] = pygame.Rect(cx + 230, cy + 220, 60, 35)
-
-        self.desenhar_botao(self.ui_rects['btn_menos_pax'], "-", (80, 80, 100), pequena_fonte=True)
-        self._desenhar_input(self.ui_rects['input_passageiros'], self.input_pedido_passageiros, self.campo_focado == 'pedido_passageiros')
-        self.desenhar_botao(self.ui_rects['btn_mais_pax'], "+", (80, 80, 100), pequena_fonte=True)
-
-        # Checkbox Premium
+    # Checkbox Premium
         self.ui_rects['checkbox_premium'] = pygame.Rect(cx + 50, cy + 275, 20, 20)
         cor_check = (255, 215, 0) if self.input_pedido_premium else (100, 100, 100)
         pygame.draw.rect(self.screen, cor_check, self.ui_rects['checkbox_premium'], border_radius=3)
@@ -560,8 +523,8 @@ class Gui:
         self.screen.blit(self.font_titulo.render("CONTROLO E FILTROS", True, COR_TEXTO), (x, y))
         
         nomes_filtro = {
-            'veiculos': "CARROS", 'pedidos': "PEDIDOS", 'rotas': "ROTAS", 
-            'tempo': "TEMPO", 'transito': "VER TRÂNSITO"
+            'veiculos': "CARROS", 'pedidos': "PEDIDOS", 'rotas': "ROTAS",
+            'tempo': "TEMPO", 'transito': "VER TRANSITO"
         }
         for k, r in self.botoes_filtro.items():
             cor = COR_BTN_ATIVO if self.filtros[k] else COR_BTN_INATIVO
@@ -569,7 +532,7 @@ class Gui:
 
         # Botão do Algoritmo
         texto_alg = self.algoritmos_disponiveis[self.algoritmo_selecionado]
-        self.desenhar_botao(self.btn_algoritmo, f"🔬 {texto_alg}", COR_BTN_ALGORITMO)
+        self.desenhar_botao(self.btn_algoritmo, f"Algoritmo: {texto_alg}", COR_BTN_ALGORITMO)
         
         # Seta do dropdown
         cx, cy = self.btn_algoritmo.right - 15, self.btn_algoritmo.centery
@@ -587,33 +550,30 @@ class Gui:
 
         # Veículos Detalhados
         if self.filtros['veiculos']:
-            self.screen.blit(self.font_titulo.render("🚗 VEÍCULOS", True, (0, 255, 127)), (x, y))
+            self.screen.blit(self.font_titulo.render("VEICULOS", True, (0, 255, 127)), (x, y))
             y += 25
             for v in dados.get('veiculos', []):
                 if y > ALTURA - 140: break
                 
-                # NOVO: Cores diferentes para TAXI vs taxiXL
                 categoria = v.get('categoria', 'TAXI')
-                if categoria == 'taxiXL':
+                if categoria == 'TaxiXL':
                     cor = (138, 43, 226) if v['ocupado'] else (100, 255, 100)
-                    icone = "🚐"
+                    icone = "TAXIXL"
                 else:
                     cor = COR_TAXI_OCUPADO if v['ocupado'] else COR_TAXI_LIVRE
-                    icone = "🚗"
+                    icone = "CAR"
                 
-                # Tipo de motor
-                tipo_motor = "⚡" if v.get('tipo_str') == "eletrico" else "⛽"
+                tipo_motor = "E" if v.get('tipo_str') == "eletrico" else "C"
                 
                 self.screen.blit(self.font_texto.render(
-                    f"{icone}{tipo_motor} {v['id']} | {v['estado_texto']}", 
+                    f"[{icone}][{tipo_motor}] {v['id']} | {v['estado_texto']}",
                     True, cor
                 ), (x, y))
                 y += 15
                 
-                # Capacidade e Bateria
                 cap = v.get('capacidade', 4)
                 self.screen.blit(self.font_pequena.render(
-                    f"   Cap: {cap} | Bat: {v['bateria']*100:.0f}%", 
+                    f"   Cap: {cap} | Bat: {v['bateria']*100:.0f}%",
                     True, COR_TEXTO_SECUNDARIO
                 ), (x, y))
                 y += 20
@@ -622,7 +582,7 @@ class Gui:
         if self.filtros['pedidos'] and y < ALTURA - 120:
             y += 10
             self.screen.blit(self.font_titulo.render(
-                f"📋 PEDIDOS ({len(dados.get('pedidos',[]))})", 
+                f"PEDIDOS ({len(dados.get('pedidos',[]))})",
                 True, (255, 200, 0)
             ), (x, y))
             y += 25
@@ -630,34 +590,32 @@ class Gui:
             for p in dados.get('pedidos', []):
                 if y > ALTURA - 120: break
                 
-                # Prioridade
                 prioridade = p.get('prioridade', 'NORMAL')
                 if prioridade == 'CRITICO':
                     cor_prior = COR_PEDIDO_CRITICO
-                    icone = "🚨"
+                    icone = "[!]"
                 elif prioridade == 'PREMIUM':
                     cor_prior = COR_PEDIDO_PREMIUM
-                    icone = "⭐"
+                    icone = "[*]"
                 else:
                     cor_prior = COR_PEDIDO_NORMAL
-                    icone = "📍"
+                    icone = "[-]"
                 
-                # NOVO: Indicar se precisa taxiXL
                 num_pax = p.get('num_passageiros', 1)
                 pax_info = f"{num_pax}pax"
                 if num_pax > 4:
-                    pax_info += " [taxiXL]"
+                    pax_info += " [XL]"
                     cor_prior = COR_PEDIDO_TAXIXL
                 
                 self.screen.blit(self.font_texto.render(
-                    f"{icone} {p['id']}: {p['origem']}→{p['destino']} ({pax_info})", 
+                    f"{icone} {p['id']}: {p['origem']}->{p['destino']} ({pax_info})",
                     True, cor_prior
                 ), (x, y))
                 y += 15
                 
                 if 'restante' in p:
                     self.screen.blit(self.font_pequena.render(
-                        f"   Restam: {p['restante']}", 
+                        f"   Restam: {p['restante']}",
                         True, COR_TEXTO_SECUNDARIO
                     ), (x, y))
                     y += 15
@@ -671,7 +629,7 @@ class Gui:
 
         acoes = self.processar_eventos()
         
-        # Desenhar o Mapa (COM CACHE)
+        # Desenhar o Mapa (com cache)
         estado_atual_transito = self.filtros.get('transito')
         
         if self.cache_mapa_surface is None or self.ultimo_estado_transito != estado_atual_transito:
@@ -700,7 +658,7 @@ class Gui:
                             
                         pygame.draw.lines(self.screen, cor_atual, False, pts, 3)
 
-        # Pedidos (COM INDICADOR DE CAPACIDADE)
+        # Pedidos
         if self.filtros['pedidos']:
             for p in dados.get('pedidos', []):
                 if p['origem'] in self.grafo.nos:
@@ -709,7 +667,6 @@ class Gui:
                     prioridade = p.get('prioridade', 'NORMAL')
                     num_pax = p.get('num_passageiros', 1)
                     
-                    # NOVO: Pedidos que precisam de taxiXL têm cor roxa
                     if num_pax > 4:
                         cor = COR_PEDIDO_TAXIXL
                         raio = 9
@@ -726,29 +683,26 @@ class Gui:
                     pygame.draw.circle(self.screen, cor, pos, raio)
                     pygame.draw.circle(self.screen, (255,255,255), pos, raio, 1)
                     
-                    # Mostrar número de passageiros
                     if num_pax > 1:
                         txt_pax = self.font_pequena.render(str(num_pax), True, (255, 255, 255))
                         self.screen.blit(txt_pax, (pos[0] + 12, pos[1] - 8))
 
-        # Veículos (DIFERENCIADOS POR CATEGORIA)
+        # Veículos
         if self.filtros['veiculos']:
             for v in dados.get('veiculos', []):
                 if v['pos'] in self.grafo.nos:
                     pos = self.to_screen(self.grafo.nos[v['pos']].coords)
                     
-                    # NOVO: Cores e tamanhos diferentes
                     categoria = v.get('categoria', 'TAXI')
-                    if categoria == 'taxiXL':
+                    if categoria == 'TaxiXL':
                         cor = COR_TAXIXL_OCUPADO if v['ocupado'] else COR_TAXIXL_LIVRE
-                        raio = 10  # taxiXLs são maiores no mapa
+                        raio = 10
                     else:
                         cor = COR_TAXI_OCUPADO if v['ocupado'] else COR_TAXI_LIVRE
                         raio = 8
                     
                     pygame.draw.circle(self.screen, cor, pos, raio)
                     
-                    # Indicador de tipo de motor
                     tipo_motor = v.get('tipo_str', 'combustao')
                     if tipo_motor == 'eletrico':
                         pygame.draw.circle(self.screen, (0, 200, 255), pos, raio//2)
@@ -770,7 +724,7 @@ class Gui:
         else:
             self.desenhar_popup_inicial()
 
-        # DROPDOWN POR CIMA DE TUDO
+        # Dropdown por cima de tudo
         if self.dropdown_algoritmo_aberto:
             self.desenhar_dropdown_algoritmo()
 

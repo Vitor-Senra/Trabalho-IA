@@ -51,16 +51,16 @@ class Simulador:
         # Sistema de Algoritmos
         self.algoritmo_ativo = "A* (Ótimo)"
         
-        print(f"✅ Frota inicial criada:")
-        print(f"   - 2 Táxis Elétricos (4 passageiros)")
-        print(f"   - 2 Táxis Combustão (4 passageiros)")
-        print(f"   - 1 TaxiXL Elétrica (6 passageiros)")
-        print(f"   - 1 TaxiXL Combustão (6 passageiros)")
+        print("Frota inicial criada:")
+        print("  - 2 Táxis Elétricos (4 passageiros)")
+        print("  - 2 Táxis Combustão (4 passageiros)")
+        print("  - 1 TaxiXL Elétrica (6 passageiros)")
+        print("  - 1 TaxiXL Combustão (6 passageiros)")
 
     def definir_algoritmo(self, nome_algoritmo):
         """Define qual algoritmo de pathfinding usar."""
         self.algoritmo_ativo = nome_algoritmo
-        print(f" [SISTEMA] Algoritmo de pathfinding alterado para: {nome_algoritmo}")
+        print(f"[SISTEMA] Algoritmo alterado para: {nome_algoritmo}")
     
     def _obter_funcao_algoritmo(self):
         """
@@ -82,12 +82,12 @@ class Simulador:
                 modulo = __import__(modulo_path, fromlist=[funcao_nome])
                 return getattr(modulo, funcao_nome)
             except (ImportError, AttributeError) as e:
-                print(f"  {self.algoritmo_ativo} não disponível: {e}")
-                print("    Usando A* como fallback")
+                print(f"[AVISO] {self.algoritmo_ativo} não disponível: {e}")
+                print("[AVISO] Usando A* como fallback")
                 from src.algorithms.informados.astar import astar
                 return astar
         else:
-            print(f"  Algoritmo '{self.algoritmo_ativo}' desconhecido, usando A*")
+            print(f"[AVISO] Algoritmo '{self.algoritmo_ativo}' desconhecido, usando A*")
             from src.algorithms.informados.astar import astar
             return astar
 
@@ -102,9 +102,9 @@ class Simulador:
                 
                 # Gerar número de passageiros (70% = 1-4, 30% = 5-6 para testar TaxiXL)
                 if random.random() < 0.7:
-                    num_passageiros = random.randint(1, 4)  # Táxi serve
+                    num_passageiros = random.randint(1, 4)
                 else:
-                    num_passageiros = random.randint(5, 6)  # Só TaxiXL serve
+                    num_passageiros = random.randint(5, 6)
                 
                 # 20% dos pedidos são PREMIUM
                 if random.random() < 0.2:
@@ -128,7 +128,7 @@ class Simulador:
                 pax_info = f"{num_passageiros}pax"
                 if num_passageiros > 4:
                     pax_info += " [TaxiXL]"
-                print(f"[PEDIDO {tipo}] {origem} → {destino} ({pax_info}, Máx: {tempo_max:.0f}min)")
+                print(f"[PEDIDO {tipo}] {origem} -> {destino} ({pax_info}, Max: {tempo_max:.0f}min)")
 
     def gerar_carro_aleatorio(self):
         """Gera veículo aleatório (TAXI ou TaxiXL, elétrico ou combustão)"""
@@ -180,7 +180,7 @@ class Simulador:
         tipo_str = tipo_str.lower().replace(" ", "_")
         
         if no_inicial not in self.grafo.nos:
-            print(f"❌ Erro: Nó '{no_inicial}' não existe.")
+            print(f"[ERRO] Nó '{no_inicial}' não existe.")
             return
 
         # Criar veículo baseado no tipo
@@ -212,21 +212,21 @@ class Simulador:
             novo_veiculo = taxiXLCombustao(vid, no_inicial)
             tipo_nome = "TaxiXL Combustão"
         else:
-            print(f"❌ Erro: Tipo '{tipo_str}' inválido.")
-            print("   Tipos válidos: taxi_eletrico, taxi_combustao, taxixl_eletrica, taxixl_combustao")
+            print(f"[ERRO] Tipo '{tipo_str}' inválido.")
+            print("Tipos válidos: taxi_eletrico, taxi_combustao, taxixl_eletrica, taxixl_combustao")
             return
         
         self.estado.veiculos[vid] = novo_veiculo
-        print(f"✅ {tipo_nome} criado em {no_inicial} (ID: {vid}, {novo_veiculo.capacidade} lugares)")
+        print(f"[CRIADO] {tipo_nome} em {no_inicial} (ID: {vid}, {novo_veiculo.capacidade} lugares)")
 
     def criar_pedido_manual(self, origem, destino, num_passageiros=1, premium=False):
         """Cria um pedido específico para testes controlados."""
         if origem not in self.grafo.nos:
-            print(f"❌ [ERRO] A origem '{origem}' não existe no mapa.")
+            print(f"[ERRO] A origem '{origem}' não existe no mapa.")
             return
 
         if destino not in self.grafo.nos:
-            print(f"❌ [ERRO] O destino '{destino}' não existe no mapa.")
+            print(f"[ERRO] O destino '{destino}' não existe no mapa.")
             return
 
         if premium:
@@ -249,22 +249,21 @@ class Simulador:
         if num_passageiros > 4:
             pax_info += " [REQUER TaxiXL]"
         
-        print(f"✅ Pedido Manual {tipo} criado: {origem} -> {destino} ({pax_info}, {tempo_max}min)")
+        print(f"[PEDIDO MANUAL {tipo}] {origem} -> {destino} ({pax_info}, {tempo_max}min)")
 
-    # ✅ FIX 1: MOVER PARA DENTRO DA CLASSE
     def recarregar_veiculo(self, veiculo_id: str, forcado: bool = False) -> bool:
         """
         Envia um veículo para a estação de recarga/abastecimento mais próxima.
         """
         if veiculo_id not in self.estado.veiculos:
-            print(f"❌ [ERRO] Veículo {veiculo_id} não encontrado")
+            print(f"[ERRO] Veículo {veiculo_id} não encontrado")
             return False
 
         veiculo = self.estado.veiculos[veiculo_id]
 
         # Se não for forçado, verificar se está disponível
         if not forcado and veiculo.estado != EstadoVeiculo.DISPONIVEL:
-            print(f"❌ [ERRO] Veículo {veiculo_id} não está disponível (Estado: {veiculo.estado.value})")
+            print(f"[ERRO] Veículo {veiculo_id} não está disponível (Estado: {veiculo.estado.value})")
             return False
 
         # Identificar tipo de estação
@@ -281,7 +280,7 @@ class Simulador:
         ]
 
         if not estacoes:
-            print(f"❌ [ERRO] Nenhuma estação de {nome_estacao} encontrada no mapa")
+            print(f"[ERRO] Nenhuma estação de {nome_estacao} encontrada no mapa")
             return False
 
         estacao_mais_proxima = min(
@@ -300,19 +299,15 @@ class Simulador:
         )
 
         if not resultado.sucesso:
-            print(f"❌ [ERRO] Não foi possível calcular rota para {no_estacao_id}")
+            print(f"[ERRO] Não foi possível calcular rota para {no_estacao_id}")
             return False
 
         veiculo.definir_rota(resultado.caminho)
         veiculo.destino_atual = no_estacao_id
-
-        # ✅ FIX PRINCIPAL: Marcar como missão de recarga
         veiculo.em_missao_recarga = True
-        
-        # ✅ FIX: Estado fica A_CAMINHO (não EM_RECARGA ainda)
         veiculo.estado = EstadoVeiculo.A_CAMINHO
 
-        print(f"🔋 [{nome_estacao}] {veiculo_id} ({veiculo.categoria_veiculo}) enviado para {no_estacao_id} ({veiculo.autonomia_atual:.0f}km restantes)")
+        print(f"[{nome_estacao}] {veiculo_id} ({veiculo.categoria_veiculo}) enviado para {no_estacao_id} ({veiculo.autonomia_atual:.0f}km restantes)")
         return True
 
     def atualizar_prioridades_pedidos(self):
@@ -324,12 +319,12 @@ class Simulador:
             
             if resultado == "ESCALADO_CRITICO":
                 tempo_restante = pedido.tempo_restante_minutos(self.tempo_atual)
-                print(f"🚨 [CRÍTICO] Pedido {pedido.id} ({pedido.origem}→{pedido.destino}) escalado! Restam {tempo_restante:.1f}min")
+                print(f"[CRÍTICO] Pedido {pedido.id} ({pedido.origem}->{pedido.destino}) escalado! Restam {tempo_restante:.1f}min")
                 self.metricas['pedidos_escalados'] += 1
             
             elif resultado == "EXPIRAR":
                 pedidos_a_remover.append(pedido)
-                print(f"❌ [EXPIRADO] Pedido {pedido.id} cancelado após {pedido.tempo_espera_maximo:.0f}min")
+                print(f"[EXPIRADO] Pedido {pedido.id} cancelado após {pedido.tempo_espera_maximo:.0f}min")
                 self.metricas['pedidos_expirados'] += 1
         
         for pedido in pedidos_a_remover:
@@ -366,7 +361,7 @@ class Simulador:
 
         for veiculo in self.estado.veiculos.values():
 
-            # ===== RECARGA / ABASTECIMENTO =====
+            # RECARGA / ABASTECIMENTO
             if veiculo.estado in (EstadoVeiculo.EM_RECARGA, EstadoVeiculo.EM_ABASTECIMENTO):
                 veiculo.tempo_em_recarga += 1
                 progresso = veiculo.tempo_em_recarga / veiculo.tempo_recarga_estimado(1.0)
@@ -382,21 +377,21 @@ class Simulador:
                     veiculo.estado = EstadoVeiculo.DISPONIVEL
                     veiculo.tempo_em_recarga = 0
                     veiculo.destino_atual = None
-                    print(f"✅ {veiculo.id} recarregado")
+                    print(f"[RECARGA COMPLETA] {veiculo.id}")
 
                 continue
 
-            # ===== VEÍCULO PARADO =====
+            # VEÍCULO PARADO
             if veiculo.estado == EstadoVeiculo.DISPONIVEL:
                 continue
 
-            # ===== MOVIMENTO =====
+            # MOVIMENTO
             chegou = veiculo.atualizar_posicao(self.grafo, 0.4)
 
             if chegou:
                 no_atual = self.grafo.nos.get(veiculo.localizacao)
 
-                # ✅ FIX: SÓ TRATA ESTAÇÃO SE ESTIVER EM MISSÃO DE RECARGA
+                # Tratamento de estação apenas se em missão de recarga
                 if getattr(veiculo, "em_missao_recarga", False):
                     if no_atual and (
                         (veiculo.tipo_str == "eletrico" and no_atual.tipo == "estacao_recarga") or
@@ -410,11 +405,10 @@ class Simulador:
                         )
                         veiculo.em_missao_recarga = False
                         tipo_estacao = "RECARGA" if veiculo.tipo_str == "eletrico" else "ABASTECIMENTO"
-                        print(f"🔌 {veiculo.id} chegou à estação de {tipo_estacao} - iniciando ({veiculo.autonomia_atual:.0f}km)")
+                        print(f"[{tipo_estacao}] {veiculo.id} iniciando ({veiculo.autonomia_atual:.0f}km)")
                         continue
                     else:
-                        # Chegou ao sítio errado durante missão de recarga
-                        print(f"⚠️ ERRO: {veiculo.id} estava em missão de recarga mas chegou a {getattr(no_atual, 'tipo', 'desconhecido')}")
+                        print(f"[AVISO] {veiculo.id} estava em missão de recarga mas chegou a local inválido")
                         veiculo.em_missao_recarga = False
                         veiculo.estado = EstadoVeiculo.DISPONIVEL
                         veiculo.destino_atual = None
@@ -472,7 +466,7 @@ class Simulador:
                 v.estado in (EstadoVeiculo.A_CAMINHO, EstadoVeiculo.EM_SERVICO) and
                 percentagem_bateria < limiar_critico
             ):
-                print(f"⚠️  {v.id} com bateria crítica ({percentagem_bateria*100:.1f}%) - abortando viagem!")
+                print(f"[BATERIA CRÍTICA] {v.id} ({percentagem_bateria*100:.1f}%) - abortando viagem")
 
                 # Cancelar pedido atual se existir
                 if v.pedido_atual:
@@ -482,7 +476,7 @@ class Simulador:
                         v.pedido_atual.estado = EstadoPedido.PENDENTE
                         v.pedido_atual.veiculo_atribuido = None
                         self.estado.pedidos_pendentes.append(v.pedido_atual)
-                        print(f"   Pedido {v.pedido_atual.id} devolvido à fila")
+                        print(f"[PEDIDO DEVOLVIDO] Pedido {v.pedido_atual.id} retornou à fila")
 
                     v.pedido_atual = None
 
@@ -506,7 +500,7 @@ class Simulador:
         if not self.estado.pedidos_pendentes or not self.estado.obter_veiculos_disponiveis():
             return
 
-        print(f"[{self.tempo_atual.strftime('%H:%M')}] A planear atribuições (Smart)...")
+        print(f"[{self.tempo_atual.strftime('%H:%M')}] Processando atribuições inteligentes...")
 
         estado_inicial = self.estado.clonar()
         queue = []
@@ -552,15 +546,13 @@ class Simulador:
             pedido_clone = melhor_acao['pedido']
             veiculo_clone = melhor_acao['veiculo']
             
-            # ✅ FIX 2: DEFINIR pedido_real e veiculo_real ANTES de usar
             pedido_real = next(p for p in self.estado.pedidos_pendentes if p.id == pedido_clone.id)
             veiculo_real = self.estado.veiculos[veiculo_clone.id]
             
-            # ✅ Agora sim pode usar
             veiculo_real.em_missao_recarga = False
             veiculo_real.destino_atual = pedido_real.origem
 
-            print(f"[INTELIGENTE] Decisão: Atribuir {veiculo_real.id} ({veiculo_real.categoria_veiculo}) ao pedido {pedido_real.id} ({pedido_real.num_passageiros}pax, {pedido_real.prioridade.name})")
+            print(f"[ATRIBUIÇÃO] {veiculo_real.id} ({veiculo_real.categoria_veiculo}) -> Pedido {pedido_real.id} ({pedido_real.num_passageiros}pax, {pedido_real.prioridade.name})")
             
             self.estado.atribuir_pedido(pedido_real, veiculo_real)
             veiculo_real.estado = EstadoVeiculo.A_CAMINHO
@@ -576,7 +568,7 @@ class Simulador:
             if rota_pickup.sucesso:
                 veiculo_real.definir_rota(rota_pickup.caminho)
             else:
-                print(f"❌ [ERRO] Falha ao calcular rota física para {veiculo_real.id}")
+                print(f"[ERRO] Falha ao calcular rota para {veiculo_real.id}")
 
     def _heuristica_estado(self, estado):
         """Heurística Multiobjetivo com Sistema de Prioridades."""
